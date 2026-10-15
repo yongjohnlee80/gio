@@ -9,11 +9,11 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	giofont "gioui.org/font"
-	"gioui.org/io/system"
-	"gioui.org/op"
-	"gioui.org/op/clip"
 	"github.com/go-text/typesetting/font"
+	giofont "github.com/yongjohnlee80/gio/font"
+	"github.com/yongjohnlee80/gio/io/system"
+	"github.com/yongjohnlee80/gio/op"
+	"github.com/yongjohnlee80/gio/op/clip"
 	"golang.org/x/image/math/fixed"
 )
 

@@ -12,22 +12,22 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"gioui.org/f32"
-	"gioui.org/font/gofont"
-	"gioui.org/gpu"
-	"gioui.org/internal/debug"
-	"gioui.org/internal/ops"
-	"gioui.org/io/event"
-	"gioui.org/io/input"
-	"gioui.org/io/key"
-	"gioui.org/io/pointer"
-	"gioui.org/io/system"
-	"gioui.org/layout"
-	"gioui.org/op"
-	"gioui.org/text"
-	"gioui.org/unit"
-	"gioui.org/widget"
-	"gioui.org/widget/material"
+	"github.com/yongjohnlee80/gio/f32"
+	"github.com/yongjohnlee80/gio/font/gofont"
+	"github.com/yongjohnlee80/gio/gpu"
+	"github.com/yongjohnlee80/gio/internal/debug"
+	"github.com/yongjohnlee80/gio/internal/ops"
+	"github.com/yongjohnlee80/gio/io/event"
+	"github.com/yongjohnlee80/gio/io/input"
+	"github.com/yongjohnlee80/gio/io/key"
+	"github.com/yongjohnlee80/gio/io/pointer"
+	"github.com/yongjohnlee80/gio/io/system"
+	"github.com/yongjohnlee80/gio/layout"
+	"github.com/yongjohnlee80/gio/op"
+	"github.com/yongjohnlee80/gio/text"
+	"github.com/yongjohnlee80/gio/unit"
+	"github.com/yongjohnlee80/gio/widget"
+	"github.com/yongjohnlee80/gio/widget/material"
 )
 
 // Option configures a window.
@@ -117,6 +117,7 @@ type eventSummary struct {
 	framePending bool
 	closing      *ClosingEvent
 	destroy      *DestroyEvent
+	drops        []DropEvent
 }
 
 type callbacks struct {
@@ -600,6 +601,11 @@ func (w *Window) nextEvent() (event.Event, bool) {
 		e := *s.cfg
 		s.cfg = nil
 		return e, true
+	case len(s.drops) > 0:
+		e := s.drops[0]
+		s.drops[0] = DropEvent{}
+		s.drops = s.drops[1:]
+		return e, true
 	case s.frame != nil:
 		e := *s.frame
 		s.frame = nil
@@ -616,6 +622,10 @@ func (w *Window) nextEvent() (event.Event, bool) {
 
 func (w *Window) processEvent(e event.Event) bool {
 	switch e2 := e.(type) {
+	case DropEvent:
+		e2.Data = append([]byte(nil), e2.Data...)
+		e2.Position = e2.Position.Sub(f32.Pt(float32(w.lastFrame.off.X), float32(w.lastFrame.off.Y)))
+		w.coalesced.drops = append(w.coalesced.drops, e2)
 	case wakeupEvent:
 		w.coalesced.wakeup = true
 	case frameEvent:

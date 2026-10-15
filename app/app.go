@@ -3,7 +3,7 @@
 package app
 
 import (
-	"gioui.org/io/event"
+	"github.com/yongjohnlee80/gio/io/event"
 	"golang.org/x/net/idna"
 	"image"
 	"net/url"
@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"gioui.org/io/input"
-	"gioui.org/layout"
-	"gioui.org/op"
-	"gioui.org/unit"
+	"github.com/yongjohnlee80/gio/io/input"
+	"github.com/yongjohnlee80/gio/layout"
+	"github.com/yongjohnlee80/gio/op"
+	"github.com/yongjohnlee80/gio/unit"
 )
 
 // extraArgs contains extra arguments to append to

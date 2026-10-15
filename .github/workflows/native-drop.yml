@@ -1,0 +1,33 @@
+name: native drop
+on:
+  pull_request:
+  push:
+    branches: [main, feat/native-file-drop]
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - name: Linux window-system libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev libgles2-mesa-dev libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev xvfb xauth
+      - run: go build ./...
+      - run: go vet ./app
+      - name: Desktop event tests (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a go test -race -count=1 ./app ./io/input
+      - name: Desktop event tests (macOS)
+        if: runner.os == 'macOS'
+        run: go test -race -count=1 ./app ./io/input
+      - name: Isolated Wayland and X11 builds
+        if: runner.os == 'Linux'
+        run: |
+          go build -tags nox11 ./app
+          go build -tags nowayland ./app

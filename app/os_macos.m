@@ -79,6 +79,37 @@ static void handleMouse(GioView *view, NSEvent *event, int typ, CGFloat dx, CGFl
 }
 
 @implementation GioView
+- (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)sender {
+	if ((sender.draggingSourceOperationMask & NSDragOperationCopy) == 0) return NSDragOperationNone;
+	NSPasteboard *pb = sender.draggingPasteboard;
+	NSArray *types = @[NSPasteboardTypeFileURL, NSPasteboardTypeString];
+	return [pb availableTypeFromArray:types] != nil ? NSDragOperationCopy : NSDragOperationNone;
+}
+- (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)sender {
+	return [self draggingEntered:sender];
+}
+- (BOOL)prepareForDragOperation:(id<NSDraggingInfo>)sender {
+	return [self draggingEntered:sender] != NSDragOperationNone;
+}
+- (BOOL)performDragOperation:(id<NSDraggingInfo>)sender {
+	if ([self draggingEntered:sender] == NSDragOperationNone) return NO;
+	NSPasteboard *pb = sender.draggingPasteboard;
+	NSArray<NSURL *> *urls = [pb readObjectsForClasses:@[[NSURL class]] options:@{NSPasteboardURLReadingFileURLsOnlyKey:@YES}];
+	NSString *type = @"text/plain";
+	NSString *payload = nil;
+	if (urls.count > 0) {
+		NSMutableArray<NSString *> *values = [NSMutableArray arrayWithCapacity:urls.count];
+		for (NSURL *url in urls) { if (url.isFileURL) [values addObject:url.absoluteString]; }
+		if (values.count == 0) return NO;
+		type = @"text/uri-list";
+		payload = [values componentsJoinedByString:@"\r\n"];
+	} else {
+		payload = [pb stringForType:NSPasteboardTypeString];
+	}
+	if (payload == nil) return NO;
+	NSPoint p = [self convertPoint:sender.draggingLocation fromView:nil];
+	return gio_onDesktopDrop(self.handle, (__bridge CFTypeRef)type, (__bridge CFTypeRef)payload, p.x, self.bounds.size.height-p.y);
+}
 - (void)setFrameSize:(NSSize)newSize {
 	[super setFrameSize:newSize];
 	[self setNeedsDisplay:YES];
@@ -400,6 +431,7 @@ CFTypeRef gio_createView(int presentWithTrans) {
 	@autoreleasepool {
 		NSRect frame = NSMakeRect(0, 0, 0, 0);
 		GioView* view = [[GioView alloc] initWithFrame:frame];
+		[view registerForDraggedTypes:@[NSPasteboardTypeFileURL, NSPasteboardTypeString]];
 		view.presentWithTrans = presentWithTrans ? YES : NO;
 		view.wantsLayer = YES;
 		view.layerContentsRedrawPolicy = NSViewLayerContentsRedrawDuringViewResize;

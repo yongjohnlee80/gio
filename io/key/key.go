@@ -7,10 +7,10 @@ import (
 	"image"
 	"strings"
 
-	"gioui.org/f32"
-	"gioui.org/internal/ops"
-	"gioui.org/io/event"
-	"gioui.org/op"
+	"github.com/yongjohnlee80/gio/f32"
+	"github.com/yongjohnlee80/gio/internal/ops"
+	"github.com/yongjohnlee80/gio/io/event"
+	"github.com/yongjohnlee80/gio/op"
 )
 
 // Filter matches any [Event] that matches the parameters.

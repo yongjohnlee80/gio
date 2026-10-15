@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"testing"
 
-	"gioui.org/internal/f32"
+	"github.com/yongjohnlee80/gio/internal/f32"
 )
 
 func TestAngleBetweenWraparound(t *testing.T) {

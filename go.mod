@@ -1,4 +1,4 @@
-module gioui.org
+module github.com/yongjohnlee80/gio
 
 go 1.24.0
 
