@@ -4,6 +4,15 @@ package app
 
 import "testing"
 
+func TestDesktopDropFollowsAnAlreadyQueuedInputFrame(t *testing.T) {
+	w := &Window{coalesced: eventSummary{frame: new(frameEvent)}}
+	w.processEvent(DropEvent{Type: "text/plain", Data: []byte("drop")})
+	e, ok := w.nextEvent()
+	if _, frame := e.(FrameEvent); !ok || !frame {
+		t.Fatalf("queued input frame overtaken by %T", e)
+	}
+}
+
 func TestDesktopDropMIMEPreference(t *testing.T) {
 	for _, c := range []struct {
 		offers []string
