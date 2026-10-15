@@ -342,7 +342,7 @@ func (w *x11Window) SetInputHint(_ key.InputHint) {}
 func (w *x11Window) EditorStateChanged(old, new editorState) {
 	if shouldCancelComposition(old, new) {
 		w.ibus.Reset()
-		w.w.SetComposingRegion(key.Range{-1, -1})
+		w.w.SetComposingRegion(key.Range{Start: -1, End: -1})
 	}
 }
 
