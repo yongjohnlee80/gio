@@ -151,6 +151,9 @@ func (w *x11Window) receiveDrop(e *C.XSelectionEvent) bool {
 		return false
 	}
 	if !d.waiting {
+		if e.property == d.content {
+			C.XDeleteProperty(w.x, w.xw, d.content)
+		}
 		return true
 	}
 	if e.requestor != w.xw || e.target != d.typ || (d.timestamp != 0 && e.time != d.timestamp) {

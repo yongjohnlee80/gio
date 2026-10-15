@@ -6,7 +6,8 @@ import "github.com/yongjohnlee80/gio/f32"
 
 // DropEvent is data dropped onto a desktop window by another application. It is delivered by
 // Window.Event, not the in-window transfer router. Type is the offered MIME type (text/uri-list
-// for files, or text/plain); Data is a complete, owned copy. Position is in client pixels.
+// or text/plain); Data is a complete, owned copy. URI lists can contain non-file URIs and
+// comment lines: clients must filter/decode them. Position is in client pixels.
 // A drop does not change keyboard focus: the client decides how to use its data.
 type DropEvent struct {
 	Type     string

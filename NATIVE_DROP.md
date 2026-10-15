@@ -1,7 +1,7 @@
 # Native desktop drops
 
 This fork is imported as `github.com/yongjohnlee80/gio`. It is based on upstream commit
-`c170b581d523dd6e94dd6e0309a7bb8ae309cc1f`, which includes Gio v0.10.3 plus seven upstream
+`c170b581d523dd6e94dd6e0309a7bb8ae309cc1f`, which includes Gio v0.10.3 plus six upstream
 changes. The module/import migration keeps the dependency usable without application-side
 `replace` directives. `gioui.org/shader` is a separate dependency and retains its own path.
 
@@ -23,7 +23,14 @@ copy operations; it never asks a source to delete files.
   report plain text otherwise. Cocoa's native copy negotiation is used.
 - Other platforms keep their existing behavior and do not generate native drop events.
 
-The event queue test checks ownership and delivery order. Desktop CI builds Linux and macOS,
+Refusals/timeouts are silent: a failed or unsupported transfer delivers no event. On macOS,
+the pasteboard string is materialized before the payload limit is checked; the limit refuses
+delivery but does not bound Cocoa's allocation.
+
+The event queue test checks ownership and delivery order. Opt-in `gio_xdnd_test` cells run an
+independent Xlib source through the actual X server and XDND handlers under Xvfb: inline and
+property-listed URI offers, unsupported types, INCR refusal, and the event loop's timeout.
+Desktop CI builds Linux and macOS,
 tests the app/input packages, and builds Wayland and X11 separately. Those checks are not proof
 of an actual OS drag gesture: compositor/source interoperability and a Finder drag still need
 native manual evidence before declaring end-to-end support verified.
