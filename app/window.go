@@ -601,16 +601,18 @@ func (w *Window) nextEvent() (event.Event, bool) {
 		e := *s.cfg
 		s.cfg = nil
 		return e, true
-	case len(s.drops) > 0:
-		e := s.drops[0]
-		s.drops[0] = DropEvent{}
-		s.drops = s.drops[1:]
-		return e, true
 	case s.frame != nil:
 		e := *s.frame
 		s.frame = nil
 		s.framePending = true
 		return e.FrameEvent, true
+	case len(s.drops) > 0:
+		// Let the application drain an already queued frame's input first, so
+		// preceding keys/clicks establish keyboard focus before a drop is pasted.
+		e := s.drops[0]
+		s.drops[0] = DropEvent{}
+		s.drops = s.drops[1:]
+		return e, true
 	case s.wakeup:
 		return wakeupEvent{}, true
 	}
