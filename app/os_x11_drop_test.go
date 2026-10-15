@@ -10,6 +10,13 @@ import (
 )
 
 func TestXDNDSourceExchange(t *testing.T) {
+	// Keep one client connected across cells so Xvfb does not reset its server
+	// between the last close and the next XOpenDisplay.
+	guard, err := newXDNDHarness()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.close()
 	for _, mode := range []string{"uri-inline", "uri-type-list", "unsupported", "incr", "timeout"} {
 		t.Run(mode, func(t *testing.T) {
 			h, err := newXDNDHarness()

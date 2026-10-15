@@ -179,6 +179,10 @@ func (h *xdndHarness) expire() time.Duration {
 		}
 	}()
 	start := time.Now()
-	h.target.dispatch() // real event-loop poll and deadline checks, not a timer imitation
+	// A dispatch can return for an unrelated server notification. The native
+	// Event loop dispatches again while no application event is ready.
+	for h.target.drop.waiting && time.Since(start) < 500*time.Millisecond {
+		h.target.dispatch() // real event-loop poll/deadline checks
+	}
 	return time.Since(start)
 }
