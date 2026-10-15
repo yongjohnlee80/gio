@@ -22,7 +22,7 @@ jobs:
       - run: go vet ./app
       - name: Desktop event tests (Linux)
         if: runner.os == 'Linux'
-        run: xvfb-run -a go test -race -count=1 ./app ./io/input
+        run: xvfb-run -a go test -tags gio_xdnd_test -race -count=1 ./app ./io/input
       - name: Desktop event tests (macOS)
         if: runner.os == 'macOS'
         run: go test -race -count=1 ./app ./io/input
