@@ -6,6 +6,7 @@ package app
 
 // This cgo harness is opt-in: Go cannot import C from a _test.go file. Its two
 // independent Xlib connections exercise the real backend through the X server.
+
 /*
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
