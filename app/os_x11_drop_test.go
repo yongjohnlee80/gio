@@ -71,6 +71,14 @@ func TestXDNDSourceExchange(t *testing.T) {
 			} else if len(h.drops()) != 0 {
 				t.Fatalf("refused drop delivered: %+v", h.drops())
 			}
+			if mode == "timeout" {
+				if h.lateReplyLeavesProperty() {
+					t.Fatal("late SelectionNotify retained GIO_DESKTOP_DROP")
+				}
+				if len(h.drops()) != 0 {
+					t.Fatal("late selection became a paste after timeout")
+				}
+			}
 		})
 	}
 }

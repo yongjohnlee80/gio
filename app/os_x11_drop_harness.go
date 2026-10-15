@@ -168,6 +168,21 @@ func (h *xdndHarness) next() xdndMessage {
 func (h *xdndHarness) copyAction() int64  { return int64(h.target.drop.copy) }
 func (h *xdndHarness) drops() []DropEvent { return h.target.w.w.coalesced.drops }
 
+func (h *xdndHarness) lateReplyLeavesProperty() bool {
+	h.reply("file:///tmp/late.png\r\n", false)
+	C.XSync(h.target.x, C.False)
+	h.target.handler.handleEvents()
+	var typ C.Atom
+	var format C.int
+	var n, after C.ulong
+	var data *C.uchar
+	C.XGetWindowProperty(h.target.x, h.target.xw, h.target.drop.content, 0, 0, C.False, C.AnyPropertyType, &typ, &format, &n, &after, &data)
+	if data != nil {
+		C.XFree(unsafe.Pointer(data))
+	}
+	return typ != C.None
+}
+
 func (h *xdndHarness) expire() time.Duration {
 	h.target.drop.deadline = time.Now().Add(40 * time.Millisecond)
 	// A broken poll timeout must fail the assertion rather than hang the test.
