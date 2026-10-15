@@ -6,11 +6,11 @@ import (
 	"image"
 	"sync/atomic"
 
-	giofont "gioui.org/font"
-	"gioui.org/io/system"
-	"gioui.org/op"
-	"gioui.org/op/clip"
-	"gioui.org/op/paint"
+	giofont "github.com/yongjohnlee80/gio/font"
+	"github.com/yongjohnlee80/gio/io/system"
+	"github.com/yongjohnlee80/gio/op"
+	"github.com/yongjohnlee80/gio/op/clip"
+	"github.com/yongjohnlee80/gio/op/paint"
 	"golang.org/x/image/math/fixed"
 )
 

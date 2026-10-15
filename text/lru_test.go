@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"testing"
 
-	"gioui.org/op/clip"
+	"github.com/yongjohnlee80/gio/op/clip"
 )
 
 func TestLayoutLRU(t *testing.T) {

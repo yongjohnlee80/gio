@@ -15,9 +15,9 @@ import (
 	"fmt"
 	_ "image/png"
 
-	giofont "gioui.org/font"
 	fontapi "github.com/go-text/typesetting/font"
 	"github.com/go-text/typesetting/font/opentype"
+	giofont "github.com/yongjohnlee80/gio/font"
 )
 
 // Face is a thread-safe representation of a loaded font. For efficiency, applications

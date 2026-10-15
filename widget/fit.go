@@ -5,8 +5,8 @@ package widget
 import (
 	"image"
 
-	"gioui.org/f32"
-	"gioui.org/layout"
+	"github.com/yongjohnlee80/gio/f32"
+	"github.com/yongjohnlee80/gio/layout"
 )
 
 // Fit scales a widget to fit and clip to the constraints.

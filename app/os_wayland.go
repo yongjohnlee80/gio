@@ -21,16 +21,16 @@ import (
 
 	syscall "golang.org/x/sys/unix"
 
-	"gioui.org/app/internal/xkb"
-	"gioui.org/f32"
-	"gioui.org/internal/fling"
-	"gioui.org/io/event"
-	"gioui.org/io/key"
-	"gioui.org/io/pointer"
-	"gioui.org/io/system"
-	"gioui.org/io/transfer"
-	"gioui.org/op"
-	"gioui.org/unit"
+	"github.com/yongjohnlee80/gio/app/internal/xkb"
+	"github.com/yongjohnlee80/gio/f32"
+	"github.com/yongjohnlee80/gio/internal/fling"
+	"github.com/yongjohnlee80/gio/io/event"
+	"github.com/yongjohnlee80/gio/io/key"
+	"github.com/yongjohnlee80/gio/io/pointer"
+	"github.com/yongjohnlee80/gio/io/system"
+	"github.com/yongjohnlee80/gio/io/transfer"
+	"github.com/yongjohnlee80/gio/op"
+	"github.com/yongjohnlee80/gio/unit"
 )
 
 // Use wayland-scanner to generate glue code for the xdg-shell and xdg-decoration extensions.
@@ -97,6 +97,7 @@ type wlDisplay struct {
 	notify struct {
 		read, write int
 	}
+	notifyMu sync.Mutex
 
 	repeat        repeatState
 	poller        poller
@@ -139,7 +140,27 @@ type wlSeat struct {
 	source *C.struct_wl_data_source
 	// content is the data belonging to source.
 	content []byte
+	drag    *wlDrop
+	drops   map[*C.struct_wl_data_offer]*wlDrop
+	// Selected drag actions arrive before drop; only copy is supported.
+	dropActions map[*C.struct_wl_data_offer]C.uint32_t
 }
+
+type wlDrop struct {
+	offer    *C.struct_wl_data_offer
+	window   *window
+	typ      string
+	position f32.Point
+	reader   *os.File
+}
+
+type wlDropRead struct {
+	drop *wlDrop
+	data []byte
+	err  error
+}
+
+func (wlDropRead) ImplementsEvent() {}
 
 type repeatState struct {
 	rate  int
@@ -217,7 +238,8 @@ type window struct {
 	wsize        image.Point // window config size before going fullscreen or maximized
 	inCompositor bool        // window is moving or being resized
 
-	clipReads chan transfer.DataEvent
+	clipReads chan event.Event
+	dropDone  chan struct{}
 
 	wakeups chan struct{}
 
@@ -359,7 +381,8 @@ func (d *wlDisplay) createNativeWindow(options []Option) (*window, error) {
 		ppdp:      ppdp,
 		ppsp:      ppdp,
 		wakeups:   make(chan struct{}, 1),
-		clipReads: make(chan transfer.DataEvent, 1),
+		clipReads: make(chan event.Event, 1),
+		dropDone:  make(chan struct{}),
 	}
 	w.surf = C.wl_compositor_create_surface(d.compositor)
 	if w.surf == nil {
@@ -476,17 +499,24 @@ func gio_onSeatCapabilities(data unsafe.Pointer, seat *C.struct_wl_seat, caps C.
 // content.
 func (s *wlSeat) flushOffers() {
 	for o := range s.offers {
-		if o == s.clipboard {
+		if o == s.clipboard || (s.drag != nil && s.drag.offer == o) || s.drops[o] != nil {
 			continue
 		}
-		// We're only interested in clipboard offers.
 		delete(s.offers, o)
+		delete(s.dropActions, o)
 		callbackDelete(unsafe.Pointer(o))
 		C.wl_data_offer_destroy(o)
 	}
 }
 
 func (s *wlSeat) destroy() {
+	for _, d := range s.drops {
+		if d.reader != nil {
+			_ = d.reader.Close()
+		}
+	}
+	s.drops = nil
+	s.drag = nil
 	if s.source != nil {
 		C.wl_data_source_destroy(s.source)
 		s.source = nil
@@ -743,6 +773,11 @@ func gio_onDataOfferSourceActions(data unsafe.Pointer, offer *C.struct_wl_data_o
 
 //export gio_onDataOfferAction
 func gio_onDataOfferAction(data unsafe.Pointer, offer *C.struct_wl_data_offer, act C.uint32_t) {
+	s := callbackLoad(data).(*wlSeat)
+	if s.dropActions == nil {
+		s.dropActions = make(map[*C.struct_wl_data_offer]C.uint32_t)
+	}
+	s.dropActions[offer] = act
 }
 
 //export gio_onDataDeviceOffer
@@ -757,19 +792,99 @@ func gio_onDataDeviceOffer(data unsafe.Pointer, dataDev *C.struct_wl_data_device
 func gio_onDataDeviceEnter(data unsafe.Pointer, dataDev *C.struct_wl_data_device, serial C.uint32_t, surf *C.struct_wl_surface, x, y C.wl_fixed_t, id *C.struct_wl_data_offer) {
 	s := callbackLoad(data).(*wlSeat)
 	s.serial = serial
+	s.drag = nil
+	if v, ok := callbackMap.Load(unsafe.Pointer(surf)); ok {
+		if w, ok := v.(*window); ok && id != nil {
+			s.drag = &wlDrop{offer: id, window: w, typ: dropMIME(s.offers[id]), position: f32.Pt(fromFixed(x), fromFixed(y))}
+			s.acceptDrop(serial)
+		}
+	}
 	s.flushOffers()
+}
+
+func (s *wlSeat) acceptDrop(serial C.uint32_t) {
+	d := s.drag
+	if d == nil {
+		return
+	}
+	var mime *C.char
+	if d.typ != "" {
+		mime = C.CString(d.typ)
+		defer C.free(unsafe.Pointer(mime))
+	}
+	C.wl_data_offer_accept(d.offer, serial, mime)
+	if C.wl_data_offer_get_version(d.offer) >= 3 {
+		var action C.uint32_t
+		if d.typ != "" {
+			action = C.WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY
+		}
+		C.wl_data_offer_set_actions(d.offer, action, action)
+	}
 }
 
 //export gio_onDataDeviceLeave
 func gio_onDataDeviceLeave(data unsafe.Pointer, dataDev *C.struct_wl_data_device) {
+	s := callbackLoad(data).(*wlSeat)
+	s.drag = nil
+	s.flushOffers()
 }
 
 //export gio_onDataDeviceMotion
 func gio_onDataDeviceMotion(data unsafe.Pointer, dataDev *C.struct_wl_data_device, t C.uint32_t, x, y C.wl_fixed_t) {
+	s := callbackLoad(data).(*wlSeat)
+	if s.drag != nil {
+		s.drag.position = f32.Pt(fromFixed(x), fromFixed(y))
+	}
 }
 
 //export gio_onDataDeviceDrop
 func gio_onDataDeviceDrop(data unsafe.Pointer, dataDev *C.struct_wl_data_device) {
+	s := callbackLoad(data).(*wlSeat)
+	d := s.drag
+	if d == nil || d.typ == "" || (C.wl_data_offer_get_version(d.offer) >= 3 && s.dropActions[d.offer] != C.WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY) {
+		s.drag = nil
+		s.flushOffers()
+		return
+	}
+	r, w, err := os.Pipe()
+	if err != nil {
+		s.drag = nil
+		s.flushOffers()
+		return
+	}
+	if err := r.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		r.Close()
+		w.Close()
+		s.drag = nil
+		s.flushOffers()
+		return
+	}
+	d.reader = r
+	if s.drops == nil {
+		s.drops = make(map[*C.struct_wl_data_offer]*wlDrop)
+	}
+	s.drops[d.offer] = d
+	s.drag = nil
+	mime := C.CString(d.typ)
+	C.wl_data_offer_receive(d.offer, mime, C.int(w.Fd()))
+	C.free(unsafe.Pointer(mime))
+	_ = w.Close()
+	C.wl_display_flush(s.disp.disp)
+	disp := s.disp
+	done := d.window.dropDone
+	go func() {
+		defer r.Close()
+		payload, err := io.ReadAll(io.LimitReader(r, maxDropBytes+1))
+		if len(payload) > maxDropBytes {
+			err = errors.New("wayland: desktop drop exceeds size limit")
+		}
+		result := wlDropRead{drop: d, data: payload, err: err}
+		select {
+		case d.window.clipReads <- result:
+			disp.wakeup()
+		case <-done:
+		}
+	}()
 }
 
 //export gio_onDataDeviceSelection
@@ -1419,8 +1534,22 @@ func (w *window) dispatch() {
 	}
 	select {
 	case e := <-w.clipReads:
-		w.disp.readClipClose = nil
-		w.ProcessEvent(e)
+		if d, ok := e.(wlDropRead); ok {
+			if s := w.disp.seat; s != nil && s.drops[d.drop.offer] == d.drop {
+				delete(s.drops, d.drop.offer)
+				if d.err == nil {
+					if C.wl_data_offer_get_version(d.drop.offer) >= 3 {
+						C.wl_data_offer_finish(d.drop.offer)
+					}
+					p := d.drop.position.Mul(float32(w.scale))
+					w.ProcessEvent(DropEvent{Type: d.drop.typ, Data: d.data, Position: p})
+				}
+				s.flushOffers()
+			}
+		} else {
+			w.disp.readClipClose = nil
+			w.ProcessEvent(e)
+		}
 	case <-w.wakeups:
 		w.w.Invalidate()
 	default:
@@ -1557,6 +1686,11 @@ func (w *window) SetAnimating(anim bool) {
 
 // Wakeup wakes up the event loop through the notification pipe.
 func (d *wlDisplay) wakeup() {
+	d.notifyMu.Lock()
+	defer d.notifyMu.Unlock()
+	if d.notify.write == 0 {
+		return
+	}
 	oneByte := make([]byte, 1)
 	if _, err := syscall.Write(d.notify.write, oneByte); err != nil && err != syscall.EAGAIN {
 		panic(fmt.Errorf("failed to write to pipe: %v", err))
@@ -1564,6 +1698,24 @@ func (d *wlDisplay) wakeup() {
 }
 
 func (w *window) destroy() {
+	if w.dropDone != nil {
+		close(w.dropDone)
+		w.dropDone = nil
+	}
+	if s := w.disp.seat; s != nil {
+		if s.drag != nil && s.drag.window == w {
+			s.drag = nil
+		}
+		for offer, d := range s.drops {
+			if d.window == w {
+				if d.reader != nil {
+					_ = d.reader.Close()
+				}
+				delete(s.drops, offer)
+			}
+		}
+		s.flushOffers()
+	}
 	if s := w.disp.seat; s != nil && s.imFocus == w {
 		s.imState.clearPreedit(w.w)
 		s.imFocus = nil
@@ -2166,6 +2318,7 @@ func (d *wlDisplay) destroy() {
 		close(d.readClipClose)
 		d.readClipClose = nil
 	}
+	d.notifyMu.Lock()
 	if d.notify.write != 0 {
 		syscall.Close(d.notify.write)
 		d.notify.write = 0
@@ -2174,6 +2327,7 @@ func (d *wlDisplay) destroy() {
 		syscall.Close(d.notify.read)
 		d.notify.read = 0
 	}
+	d.notifyMu.Unlock()
 	d.repeat.Stop(0)
 	if d.xkb != nil {
 		d.xkb.Destroy()

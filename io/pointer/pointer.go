@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"gioui.org/f32"
-	"gioui.org/internal/ops"
-	"gioui.org/io/event"
-	"gioui.org/io/key"
-	"gioui.org/op"
+	"github.com/yongjohnlee80/gio/f32"
+	"github.com/yongjohnlee80/gio/internal/ops"
+	"github.com/yongjohnlee80/gio/io/event"
+	"github.com/yongjohnlee80/gio/io/key"
+	"github.com/yongjohnlee80/gio/op"
 )
 
 // Event is a pointer event.

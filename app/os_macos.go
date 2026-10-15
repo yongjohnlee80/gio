@@ -15,16 +15,16 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"gioui.org/internal/f32"
-	"gioui.org/io/event"
-	"gioui.org/io/key"
-	"gioui.org/io/pointer"
-	"gioui.org/io/system"
-	"gioui.org/io/transfer"
-	"gioui.org/op"
-	"gioui.org/unit"
+	"github.com/yongjohnlee80/gio/internal/f32"
+	"github.com/yongjohnlee80/gio/io/event"
+	"github.com/yongjohnlee80/gio/io/key"
+	"github.com/yongjohnlee80/gio/io/pointer"
+	"github.com/yongjohnlee80/gio/io/system"
+	"github.com/yongjohnlee80/gio/io/transfer"
+	"github.com/yongjohnlee80/gio/op"
+	"github.com/yongjohnlee80/gio/unit"
 
-	_ "gioui.org/internal/cocoainit"
+	_ "github.com/yongjohnlee80/gio/internal/cocoainit"
 )
 
 /*
@@ -408,6 +408,17 @@ func (w *window) ReadClipboard() {
 			return io.NopCloser(strings.NewReader(content))
 		},
 	})
+}
+
+//export gio_onDesktopDrop
+func gio_onDesktopDrop(h C.uintptr_t, typ, payload C.CFTypeRef, x, y C.CGFloat) C.bool {
+	w := windowFor(h)
+	data := []byte(nsstringToString(payload))
+	if len(data) > maxDropBytes {
+		return C.bool(false)
+	}
+	w.ProcessEvent(DropEvent{Type: nsstringToString(typ), Data: data, Position: f32.Pt(float32(x)*w.scale, float32(y)*w.scale)})
+	return C.bool(true)
 }
 
 func (w *window) WriteClipboard(mime string, s []byte) {

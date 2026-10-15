@@ -9,17 +9,17 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"gioui.org/f32"
-	"gioui.org/font"
-	"gioui.org/font/gofont"
-	"gioui.org/io/event"
-	"gioui.org/io/input"
-	"gioui.org/io/key"
-	"gioui.org/layout"
-	"gioui.org/op"
-	"gioui.org/text"
-	"gioui.org/unit"
-	"gioui.org/widget"
+	"github.com/yongjohnlee80/gio/f32"
+	"github.com/yongjohnlee80/gio/font"
+	"github.com/yongjohnlee80/gio/font/gofont"
+	"github.com/yongjohnlee80/gio/io/event"
+	"github.com/yongjohnlee80/gio/io/input"
+	"github.com/yongjohnlee80/gio/io/key"
+	"github.com/yongjohnlee80/gio/layout"
+	"github.com/yongjohnlee80/gio/op"
+	"github.com/yongjohnlee80/gio/text"
+	"github.com/yongjohnlee80/gio/unit"
+	"github.com/yongjohnlee80/gio/widget"
 )
 
 func FuzzIME(f *testing.F) {

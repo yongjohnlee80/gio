@@ -38,19 +38,19 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"gioui.org/f32"
-	"gioui.org/io/event"
-	"gioui.org/io/key"
-	"gioui.org/io/pointer"
-	"gioui.org/io/system"
-	"gioui.org/io/transfer"
-	"gioui.org/op"
-	"gioui.org/unit"
+	"github.com/yongjohnlee80/gio/f32"
+	"github.com/yongjohnlee80/gio/io/event"
+	"github.com/yongjohnlee80/gio/io/key"
+	"github.com/yongjohnlee80/gio/io/pointer"
+	"github.com/yongjohnlee80/gio/io/system"
+	"github.com/yongjohnlee80/gio/io/transfer"
+	"github.com/yongjohnlee80/gio/op"
+	"github.com/yongjohnlee80/gio/unit"
 
 	syscall "golang.org/x/sys/unix"
 
-	"gioui.org/app/internal/ibus"
-	"gioui.org/app/internal/xkb"
+	"github.com/yongjohnlee80/gio/app/internal/ibus"
+	"github.com/yongjohnlee80/gio/app/internal/xkb"
 )
 
 const (
@@ -64,6 +64,7 @@ type x11Window struct {
 	xkb          *xkb.Context
 	xkbEventBase C.int
 	xw           C.Window
+	drop         x11Drop
 	ibus         *ibus.IBus
 
 	atoms struct {
@@ -478,6 +479,9 @@ dispatchFnsLoop:
 	}
 
 	xfd := C.XConnectionNumber(w.x)
+	if w.drop.waiting && !time.Now().Before(w.drop.deadline) {
+		w.finishDrop(false)
+	}
 
 	// Poll for events and notifications.
 	pollfds := []syscall.PollFd{
@@ -502,7 +506,11 @@ dispatchFnsLoop:
 			// Clear poll events.
 			*xEvents = 0
 			// Wait for X event or gio notification.
-			if _, err := syscall.Poll(pollfds, -1); err != nil && err != syscall.EINTR {
+			timeout := -1
+			if w.drop.waiting {
+				timeout = max(1, int(time.Until(w.drop.deadline).Milliseconds()))
+			}
+			if _, err := syscall.Poll(pollfds, timeout); err != nil && err != syscall.EINTR {
 				panic(fmt.Errorf("x11 loop: poll failed: %w", err))
 			}
 			switch {
@@ -516,6 +524,9 @@ dispatchFnsLoop:
 		}
 	}
 	// Clear notifications.
+	if w.drop.waiting && !time.Now().Before(w.drop.deadline) {
+		w.finishDrop(false)
+	}
 	for {
 		_, err := syscall.Read(w.notify.read, w.buf[:])
 		if err == syscall.EAGAIN {
@@ -538,6 +549,9 @@ dispatchFnsLoop:
 }
 
 func (w *x11Window) destroy() {
+	if w.drop.source != 0 {
+		w.finishDrop(false)
+	}
 	if w.notify.write != 0 {
 		syscall.Close(w.notify.write)
 		w.notify.write = 0
@@ -738,6 +752,10 @@ func (h *x11EventHandler) handleEvents() bool {
 			// redraw will be done by a later expose event
 		case C.SelectionNotify:
 			cevt := (*C.XSelectionEvent)(unsafe.Pointer(xev))
+			if w.receiveDrop(cevt) {
+				redraw = true
+				continue
+			}
 			prop := w.atoms.clipboardContent
 			if cevt.property != prop {
 				break
@@ -809,6 +827,9 @@ func (h *x11EventHandler) handleEvents() bool {
 			}
 		case C.ClientMessage: // extensions
 			cevt := (*C.XClientMessageEvent)(unsafe.Pointer(xev))
+			if w.dropMessage(cevt) {
+				continue
+			}
 			switch *(*C.long)(unsafe.Pointer(&cevt.data)) {
 			case C.long(w.atoms.evDelWindow):
 				if w.closing != nil {
@@ -932,6 +953,7 @@ func newX11Window(gioWin *callbacks, options []Option) error {
 	w.atoms.wmActiveWindow = w.atom("_NET_ACTIVE_WINDOW", false)
 	w.atoms.wmStateMaximizedHorz = w.atom("_NET_WM_STATE_MAXIMIZED_HORZ", false)
 	w.atoms.wmStateMaximizedVert = w.atom("_NET_WM_STATE_MAXIMIZED_VERT", false)
+	w.initDrop()
 
 	// extensions
 	C.XSetWMProtocols(dpy, win, &w.atoms.evDelWindow, 1)
