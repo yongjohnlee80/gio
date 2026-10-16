@@ -51,11 +51,16 @@ there. What the fork adds is in [NATIVE_DROP.md](NATIVE_DROP.md).
 6. **After merge:** tag the next patch with its upstream base in the note.
 7. **Consumers:** move golib/gui to the new tag, and run the IME matrix there (see Gates).
 
-To cherry-pick one fix:
-1. `git fetch --no-tags upstream`.
-2. `git cherry-pick -x <commit>`, resolving any conflicts.
-3. `scripts/sync-upstream.sh rename && scripts/sync-upstream.sh check`, then
-   `git commit --amend --no-edit`.
+To cherry-pick one fix (on a sync branch):
+1. `git fetch --no-tags upstream`. The remote must be the sourcehut URL above; `merge` refuses any
+   other.
+2. `git cherry-pick -x <commit>`.
+3. If it applies cleanly, it's committed with upstream's imports:
+   `scripts/sync-upstream.sh rename && scripts/sync-upstream.sh check`, then
+   `git commit --amend --no-edit` to fold the rename into it.
+4. If it conflicts, nothing is committed yet. Resolve the files and stage them, run
+   `scripts/sync-upstream.sh rename && scripts/sync-upstream.sh check`, then
+   `git cherry-pick --continue`.
 
 ## Conflicts
 

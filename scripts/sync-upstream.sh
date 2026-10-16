@@ -25,8 +25,13 @@ root=$(git rev-parse --show-toplevel)
 cd "$root"
 
 ensure_remote() {
-	if ! git remote get-url upstream >/dev/null 2>&1; then
+	local url
+	# The configured URL, before any url.<base>.insteadOf rewriting get-url would apply.
+	if ! url=$(git config --get remote.upstream.url); then
 		git remote add upstream "$UPSTREAM_URL"
+	elif [ "$url" != "$UPSTREAM_URL" ]; then
+		# A remote named upstream that points elsewhere (a mirror, a fork) is not what this merges.
+		die "remote upstream is $url, not $UPSTREAM_URL: fix it (git remote set-url upstream $UPSTREAM_URL) and rerun"
 	fi
 	# Upstream's tags never enter refs/tags. Pushed, a v0.10.x tag would become a version of this
 	# module whose go.mod names gioui.org, and a higher one than ours.
