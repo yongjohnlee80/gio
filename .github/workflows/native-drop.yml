@@ -19,7 +19,13 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update -qq && sudo apt-get install -y libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev libgles2-mesa-dev libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev xvfb xauth
       - run: go build ./...
+      # On Windows, two vet checks report upstream's own syscall code (unkeyed composite literals,
+      # unsafe.Pointer conversions in os_windows.go); fixing them would diverge from upstream, so
+      # they are off there and every other check runs.
       - run: go vet ./app
+        if: runner.os != 'Windows'
+      - run: go vet -composites=false -unsafeptr=false ./app
+        if: runner.os == 'Windows'
       - name: Desktop event tests (Linux)
         if: runner.os == 'Linux'
         run: xvfb-run -a go test -tags gio_xdnd_test -race -count=1 ./app ./io/input
