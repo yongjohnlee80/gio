@@ -152,6 +152,9 @@ type wlDrop struct {
 	typ      string
 	position f32.Point
 	reader   *os.File
+	// finish is whether a successful read ends with wl_data_offer.finish: only for a copy
+	// (dropOutcome).
+	finish bool
 }
 
 type wlDropRead struct {
@@ -161,6 +164,14 @@ type wlDropRead struct {
 }
 
 func (wlDropRead) ImplementsEvent() {}
+
+// dropOutcome's action values are the protocol's: a mismatch fails to compile.
+const (
+	_ = uint(wlActionCopy - C.WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY)
+	_ = uint(C.WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY - wlActionCopy)
+	_ = uint(wlActionNone - C.WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE)
+	_ = uint(C.WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE - wlActionNone)
+)
 
 type repeatState struct {
 	rate  int
@@ -841,11 +852,18 @@ func gio_onDataDeviceMotion(data unsafe.Pointer, dataDev *C.struct_wl_data_devic
 func gio_onDataDeviceDrop(data unsafe.Pointer, dataDev *C.struct_wl_data_device) {
 	s := callbackLoad(data).(*wlSeat)
 	d := s.drag
-	if d == nil || d.typ == "" || (C.wl_data_offer_get_version(d.offer) >= 3 && s.dropActions[d.offer] != C.WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY) {
+	if d == nil || d.typ == "" {
 		s.drag = nil
 		s.flushOffers()
 		return
 	}
+	read, finish := dropOutcome(uint32(C.wl_data_offer_get_version(d.offer)), uint32(s.dropActions[d.offer]))
+	if !read {
+		s.drag = nil
+		s.flushOffers()
+		return
+	}
+	d.finish = finish
 	r, w, err := os.Pipe()
 	if err != nil {
 		s.drag = nil
@@ -1538,7 +1556,7 @@ func (w *window) dispatch() {
 			if s := w.disp.seat; s != nil && s.drops[d.drop.offer] == d.drop {
 				delete(s.drops, d.drop.offer)
 				if d.err == nil {
-					if C.wl_data_offer_get_version(d.drop.offer) >= 3 {
+					if d.drop.finish {
 						C.wl_data_offer_finish(d.drop.offer)
 					}
 					p := d.drop.position.Mul(float32(w.scale))

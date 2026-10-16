@@ -49,3 +49,25 @@ func TestDesktopDropsAreQueuedInOrderWithOwnedData(t *testing.T) {
 		t.Fatal("drop delivered twice")
 	}
 }
+
+// A Wayland drop reads a copy and finishes it; reads a move or ask without finishing, so the source
+// keeps its files (Hyprland keeps the move it chose before set_actions); refuses no action; and
+// reads, unfinished, an offer older than actions.
+func TestWaylandDropOutcome(t *testing.T) {
+	for _, c := range []struct {
+		version, action uint32
+		read, finish    bool
+	}{
+		{3, 1, true, true},   // copy
+		{3, 2, true, false},  // move: never finish
+		{3, 4, true, false},  // ask
+		{3, 3, true, false},  // copy|move as one value: not a copy, so unfinished
+		{3, 0, false, false}, // none
+		{2, 0, true, false},  // before actions
+	} {
+		read, finish := dropOutcome(c.version, c.action)
+		if read != c.read || finish != c.finish {
+			t.Errorf("v%d action %d: read %v finish %v, want %v %v", c.version, c.action, read, finish, c.read, c.finish)
+		}
+	}
+}

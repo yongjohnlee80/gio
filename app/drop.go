@@ -31,3 +31,30 @@ func dropMIME(offered []string) string {
 	}
 	return ""
 }
+
+// The wl_data_device_manager.dnd_action values dropOutcome reads (stable since version 3).
+const (
+	wlActionNone = 0
+	wlActionCopy = 1
+)
+
+// dropOutcome is what a Wayland drop of an offer at version, with the last action the compositor
+// selected, does: whether its data is read, and whether a successful read ends with
+// wl_data_offer.finish.
+//
+// Only a copy is finished. A compositor can keep a move it chose before the client's set_actions
+// (Hyprland 0.56 sends action move ahead of enter and never revises it), and finishing a move tells
+// the source to delete its files. So a move or ask is read and the offer destroyed unfinished: the
+// source sees the drop cancelled and keeps its files, and the client still has the data. An offer
+// before version 3 has no actions or finish. No action at all is refused.
+func dropOutcome(version, action uint32) (read, finish bool) {
+	switch {
+	case version < 3:
+		return true, false
+	case action == wlActionCopy:
+		return true, true
+	case action != wlActionNone:
+		return true, false
+	}
+	return false, false
+}
