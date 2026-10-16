@@ -13,6 +13,6 @@ require (
 	golang.org/x/text v0.41.0
 )
 
-require golang.org/x/net v0.48.0
+require golang.org/x/net v0.58.0
 
 require github.com/godbus/dbus/v5 v5.2.2
