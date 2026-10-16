@@ -29,8 +29,8 @@ there. What the fork adds is in [NATIVE_DROP.md](NATIVE_DROP.md).
   fork adds, or an upstream release that breaks its API.
 - **Each tag's note names its upstream base** (a tag, or a commit with the tag it follows).
   `NATIVE_DROP.md`'s first paragraph is updated to the same base.
-- **Tag only after the fork's CI passes** on the commit: both `native drop` jobs and both
-  `govulncheck` jobs.
+- **Tag only after the fork's CI passes** on the commit: every `native drop` and `govulncheck` job
+  (Linux, macOS and Windows).
 
 ## Procedure
 
@@ -96,10 +96,12 @@ To cherry-pick one fix:
 ## Gates
 
 - **The fork's CI.**
-  - `native drop` runs on Linux and macOS: the build, `go vet ./app`, the race tests of `./app` and
-    `./io/input`, and the separate `nox11` and `nowayland` builds. On Linux the race tests include
-    the Xvfb XDND cells (`-tags gio_xdnd_test`).
-  - `govulncheck` runs on Linux and macOS.
+  - `native drop` runs on Linux, macOS and Windows: the build, `go vet ./app`, and the tests of
+    `./app` and `./io/input`, with the race detector on Linux and macOS. On Linux they include the
+    Xvfb XDND cells (`-tags gio_xdnd_test`), and the separate `nox11` and `nowayland` builds run
+    there too. Windows has no native drops yet, so its job proves the fork still builds and passes
+    there.
+  - `govulncheck` runs on Linux, macOS and Windows.
 - **VM43, for agents.** Run the same tests in `golang:1.25` with the Linux window-system libraries
   and Xvfb. Run them against a `git archive` of the head, never a shared worktree. Keep the mutants
   that guard the drop: the `XdndStatus` flag, the finish order, the deadline, the late-property
@@ -121,7 +123,8 @@ To cherry-pick one fix:
 - **Upstream publishes no security advisories,** so the fork watches its own code and modules.
   - `govulncheck` runs on every push and pull request, and weekly, since a new advisory can name a
     module that didn't change.
-  - It reports for the platform it runs on, and the fork ships drops for Linux and macOS.
+  - It reports for the platform it runs on: Linux, macOS and Windows, the platforms consumers
+    ship on (AutoDoc v0.2 adds Windows).
   - It uses v1.7.0, the newest release that builds with Go 1.25. Move it when the toolchain moves.
 - **Dependencies move on their own clock.** Text shaping, image decoding and system calls are
   separate modules: `github.com/go-text/typesetting`, `golang.org/x/image`, `golang.org/x/sys` and
