@@ -4,6 +4,8 @@ This fork is imported as `github.com/yongjohnlee80/gio`. It is based on upstream
 `c170b581d523dd6e94dd6e0309a7bb8ae309cc1f`, which includes Gio v0.10.3 plus six upstream
 changes. The module/import migration keeps the dependency usable without application-side
 `replace` directives. `gioui.org/shader` is a separate dependency and retains its own path.
+Syncing with upstream, the fork's versions and its security watch are in
+[UPSTREAM.md](UPSTREAM.md).
 
 `app.Window.Event()` delivers `app.DropEvent` for external desktop drops. `Type` is
 `text/uri-list` or a supported plain-text MIME type, `Data` is an owned payload, and `Position`
