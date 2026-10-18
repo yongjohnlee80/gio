@@ -25,10 +25,9 @@ func TestDMABufQueriesRunAndAgree(t *testing.T) {
 	}
 	mods := FormatModifiers(pd, FORMAT_R8G8B8A8_SRGB)
 	if !supported && len(mods) > 0 {
-		for _, m := range mods {
-			if m.Importer {
-				t.Errorf("modifier %#x reported importable on a device without the dma-buf extensions", m.Mod)
-			}
-		}
+		t.Errorf("%d modifiers listed on a device without the dma-buf extensions", len(mods))
+	}
+	if supported {
+		t.Logf("RGBA8 modifiers: %+v", mods)
 	}
 }

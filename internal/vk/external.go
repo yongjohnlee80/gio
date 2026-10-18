@@ -285,9 +285,13 @@ type Modifier struct {
 	Importer bool // a sampled 2D image with it imports from a dma-buf
 }
 
-// FormatModifiers is fmt's modifiers on pd, each checked for dma-buf import.
+// FormatModifiers is fmt's modifiers on pd, each checked for dma-buf import; none on a device
+// without the dma-buf extensions, where the modifier queries are invalid and their answers
+// meaningless (a software device may answer them anyway).
 func FormatModifiers(pd PhysicalDevice, fmt Format) []Modifier {
-	loadExt11()
+	if !SupportsDMABufImport(pd) {
+		return nil
+	}
 	const max = 64
 	var mods [max]C.uint64_t
 	var planes [max]C.uint32_t
