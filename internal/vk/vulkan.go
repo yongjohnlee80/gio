@@ -841,9 +841,14 @@ func CreateInstance(exts ...string) (Instance, error) {
 	makeVer := func(variant, major, minor, patch int) C.uint32_t {
 		return ((((C.uint32_t)(variant)) << 29) | (((C.uint32_t)(major)) << 22) | (((C.uint32_t)(minor)) << 12) | ((C.uint32_t)(patch)))
 	}
+	// Vulkan 1.1 when the loader has it: dma-buf import (external.go) needs its queries.
+	ver := makeVer(0, 1, 0, 0)
+	if InstanceVersion() >= Version11 {
+		ver = makeVer(0, 1, 1, 0)
+	}
 	appInf := C.VkApplicationInfo{
 		sType:      C.VK_STRUCTURE_TYPE_APPLICATION_INFO,
-		apiVersion: makeVer(0, 1, 0, 0),
+		apiVersion: ver,
 	}
 	inf := C.VkInstanceCreateInfo{
 		sType: C.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,

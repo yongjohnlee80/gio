@@ -82,6 +82,9 @@ type Vulkan struct {
 	QueueIndex int
 	// Format is a VkFormat that matches render targets.
 	Format int
+	// DMABuf reports that the device was created with vk.DMABufExtensions on Vulkan 1.1, so it
+	// can import dma-bufs (op/extimage).
+	DMABuf bool
 }
 
 // API specific device constructors.

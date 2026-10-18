@@ -17,6 +17,7 @@ type vkContext struct {
 	inst       vk.Instance
 	dev        vk.Device
 	queueFam   int
+	dmabuf     bool // created with vk.DMABufExtensions
 	queue      vk.Queue
 	acquireSem vk.Semaphore
 	presentSem vk.Semaphore
@@ -35,7 +36,12 @@ func newVulkanContext(inst vk.Instance, surf vk.Surface) (*vkContext, error) {
 	if err != nil {
 		return nil, err
 	}
-	dev, err := vk.CreateDeviceAndQueue(physDev, qFam, "VK_KHR_swapchain")
+	exts := []string{"VK_KHR_swapchain"}
+	dmabuf := vk.SupportsDMABufImport(physDev)
+	if dmabuf {
+		exts = append(exts, vk.DMABufExtensions...)
+	}
+	dev, err := vk.CreateDeviceAndQueue(physDev, qFam, exts...)
 	if err != nil {
 		return nil, err
 	}
@@ -62,6 +68,7 @@ func newVulkanContext(inst vk.Instance, surf vk.Surface) (*vkContext, error) {
 		inst:       inst,
 		dev:        dev,
 		queueFam:   qFam,
+		dmabuf:     dmabuf,
 		queue:      vk.GetDeviceQueue(dev, qFam, 0),
 		acquireSem: acquireSem,
 		presentSem: presentSem,
@@ -95,6 +102,7 @@ func (c *vkContext) api() gpu.API {
 		Format:      int(c.format),
 		QueueFamily: c.queueFam,
 		QueueIndex:  0,
+		DMABuf:      c.dmabuf,
 	}
 }
 

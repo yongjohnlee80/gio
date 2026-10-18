@@ -16,6 +16,7 @@ type vkContext struct {
 	inst     vk.Instance
 	dev      vk.Device
 	queueFam int
+	dmabuf   bool
 }
 
 func init() {
@@ -32,7 +33,12 @@ func newVulkanContext() (context, error) {
 		vk.DestroyInstance(inst)
 		return nil, err
 	}
-	dev, err := vk.CreateDeviceAndQueue(physDev, qFam)
+	var exts []string
+	dmabuf := vk.SupportsDMABufImport(physDev)
+	if dmabuf {
+		exts = vk.DMABufExtensions
+	}
+	dev, err := vk.CreateDeviceAndQueue(physDev, qFam, exts...)
 	if err != nil {
 		vk.DestroyInstance(inst)
 		return nil, err
@@ -42,6 +48,7 @@ func newVulkanContext() (context, error) {
 		inst:     inst,
 		dev:      dev,
 		queueFam: qFam,
+		dmabuf:   dmabuf,
 	}
 	return ctx, nil
 }
@@ -53,6 +60,7 @@ func (c *vkContext) API() gpu.API {
 		Format:      int(vk.FORMAT_R8G8B8A8_SRGB),
 		QueueFamily: c.queueFam,
 		QueueIndex:  0,
+		DMABuf:      c.dmabuf,
 	}
 }
 
