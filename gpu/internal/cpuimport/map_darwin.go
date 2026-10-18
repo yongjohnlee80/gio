@@ -12,6 +12,10 @@ package cpuimport
 
 static int gioLock(IOSurfaceRef s) { return IOSurfaceLock(s, kIOSurfaceLockReadOnly, NULL); }
 static void gioUnlock(IOSurfaceRef s) { IOSurfaceUnlock(s, kIOSurfaceLockReadOnly, NULL); }
+
+// gioSurface is the IOSurfaceRef a frame carries as an integer: the cast is C's, so Go never
+// turns an integer into a pointer.
+static IOSurfaceRef gioSurface(uintptr_t p) { return (IOSurfaceRef)p; }
 */
 import "C"
 
@@ -38,7 +42,7 @@ func mapPlatform(d extimage.Desc) ([]plane, func(), error) {
 	if d.Kind != extimage.KindIOSurface || d.IOSurface == 0 {
 		return nil, nil, fmt.Errorf("cpuimport: cannot map a %v frame", d.Kind)
 	}
-	s := C.IOSurfaceRef(unsafe.Pointer(d.IOSurface))
+	s := C.gioSurface(C.uintptr_t(d.IOSurface))
 	if C.gioLock(s) != 0 {
 		return nil, nil, fmt.Errorf("cpuimport: IOSurfaceLock failed")
 	}
