@@ -9,6 +9,7 @@ import (
 	"image/color"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -29,7 +30,6 @@ import (
 	"github.com/yongjohnlee80/gio/unit"
 	"github.com/yongjohnlee80/gio/widget"
 	"github.com/yongjohnlee80/gio/widget/material"
-	"sync/atomic"
 )
 
 // Option configures a window.
@@ -986,12 +986,6 @@ func NavigationColor(color color.NRGBA) Option {
 	}
 }
 
-// CustomRenderer controls whether the window contents is
-// rendered by the client. If true, no GPU context is created.
-//
-// Caller must assume responsibility for rendering which includes
-// initializing the render backend, swapping the framebuffer and
-// handling frame pacing.
 // PreferVulkan asks a Wayland window to try Vulkan before EGL, for frames its device can import
 // without a copy (op/extimage). If Vulkan is unavailable the window falls back to EGL as usual.
 // Other platforms ignore it: X11 keeps Vulkan off (see vulkanBuggy), macOS uses Metal already.
@@ -1011,6 +1005,12 @@ func (w *Window) ExternalCaps() (extimage.Caps, bool) {
 	return extimage.Caps{}, false
 }
 
+// CustomRenderer controls whether the window contents is
+// rendered by the client. If true, no GPU context is created.
+//
+// Caller must assume responsibility for rendering which includes
+// initializing the render backend, swapping the framebuffer and
+// handling frame pacing.
 func CustomRenderer(custom bool) Option {
 	return func(_ unit.Metric, cnf *Config) {
 		cnf.CustomRenderer = custom
