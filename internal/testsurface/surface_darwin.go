@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: Unlicense OR MIT
 
-// Package testsurface makes IOSurfaces for tests of the extimage drivers. It is not for
-// production use.
 package testsurface
 
 /*
