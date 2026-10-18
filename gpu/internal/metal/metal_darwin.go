@@ -495,6 +495,13 @@ func init() {
 	driver.NewMetalDevice = newMetalDevice
 }
 
+// samplerFor is a sampler state for the filters, as NewTexture makes one; 0 on failure.
+func (b *Backend) samplerFor(minFilter, magFilter driver.TextureFilter) C.CFTypeRef {
+	min, mip := samplerFilterFor(minFilter)
+	max, _ := samplerFilterFor(magFilter)
+	return C.newSampler(b.dev, min, max, mip)
+}
+
 func newMetalDevice(api driver.Metal) (driver.Device, error) {
 	dev := C.CFTypeRef(api.Device)
 	C.CFRetain(dev)

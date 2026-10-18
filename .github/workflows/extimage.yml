@@ -1,0 +1,27 @@
+name: extimage
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - name: Linux libraries, with Mesa's software GPU for headless draws
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev libgles2-mesa-dev libegl1-mesa-dev libgl1-mesa-dri mesa-vulkan-drivers libffi-dev libxcursor-dev libvulkan-dev
+      - run: go vet ./op/extimage ./gpu/... ./internal/vk/... ./internal/testsurface/...
+      # The contract, the CPU driver, the renderer's routing, and real draws through headless
+      # windows: GL and Vulkan (Mesa) on Linux, Metal on macOS, where an IOSurface frame is drawn.
+      - run: go test -race -count=1 ./op/extimage ./gpu ./gpu/internal/cpuimport ./gpu/headless
+      - name: Headless on Vulkan
+        if: runner.os == 'Linux'
+        run: go test -tags noopengl -count=1 ./gpu/headless ./internal/vk
