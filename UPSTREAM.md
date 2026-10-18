@@ -3,7 +3,8 @@
 This repository is `github.com/yongjohnlee80/gio`, a fork of [Gio](https://gioui.org). On GitHub it
 is a fork of `gioui/gio`, which is only a mirror. The real upstream is
 [`git.sr.ht/~eliasnaur/gio`](https://git.sr.ht/~eliasnaur/gio), and the sync script fetches from
-there. What the fork adds is in [NATIVE_DROP.md](NATIVE_DROP.md).
+there. What the fork adds is in [NATIVE_DROP.md](NATIVE_DROP.md) (desktop drops) and
+[EXTIMAGE.md](EXTIMAGE.md) (external images: decoded and GPU-rendered frames, in-place pixels).
 
 ## Policy
 
@@ -16,7 +17,7 @@ there. What the fork adds is in [NATIVE_DROP.md](NATIVE_DROP.md).
   `github.com/yongjohnlee80/gio` whose `go.mod` names `gioui.org`, and a higher one than ours.
   - The script fetches upstream tags into `refs/upstream-tags/`, never `refs/tags/`.
   - It sets `remote.upstream.tagOpt --no-tags`.
-- **Contribute the drop feature upstream** when it has had native use. Patches go to
+- **Contribute the drop feature and external images upstream** when each has had native use. Patches go to
   [gio-patches](https://lists.sr.ht/~eliasnaur/gio-patches), with `git send-email` and without the
   module rename. If upstream takes it, consumers go back to `gioui.org` and this fork retires.
 
@@ -30,7 +31,7 @@ there. What the fork adds is in [NATIVE_DROP.md](NATIVE_DROP.md).
 - **Each tag's note names its upstream base** (a tag, or a commit with the tag it follows).
   `NATIVE_DROP.md`'s first paragraph is updated to the same base.
 - **Tag only after the fork's CI passes** on the commit: every `native drop` and `govulncheck` job
-  (Linux, macOS and Windows).
+  (Linux, macOS and Windows), and every `extimage` job (Linux and macOS).
 
 ## Procedure
 
