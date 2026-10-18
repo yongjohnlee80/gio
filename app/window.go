@@ -24,10 +24,12 @@ import (
 	"github.com/yongjohnlee80/gio/io/system"
 	"github.com/yongjohnlee80/gio/layout"
 	"github.com/yongjohnlee80/gio/op"
+	"github.com/yongjohnlee80/gio/op/extimage"
 	"github.com/yongjohnlee80/gio/text"
 	"github.com/yongjohnlee80/gio/unit"
 	"github.com/yongjohnlee80/gio/widget"
 	"github.com/yongjohnlee80/gio/widget/material"
+	"sync/atomic"
 )
 
 // Option configures a window.
@@ -46,6 +48,9 @@ type Window struct {
 
 	ctx context
 	gpu gpu.GPU
+	// extCaps is the GPU's extimage caps, published when it is made and cleared when it goes,
+	// for ExternalCaps on any goroutine.
+	extCaps atomic.Pointer[extimage.Caps]
 	// timer tracks the delayed invalidate goroutine.
 	timer struct {
 		// quit is shuts down the goroutine.
@@ -179,6 +184,8 @@ func (w *Window) validateAndProcess(size image.Point, sync bool, frame *op.Ops, 
 				return err
 			}
 			w.gpu = gpu
+			caps := gpu.ExternalCaps()
+			w.extCaps.Store(&caps)
 		}
 		if w.gpu != nil {
 			if err := w.frame(frame, size); err != nil {
@@ -514,6 +521,7 @@ func (c *callbacks) ActionAt(p f32.Point) (system.Action, bool) {
 }
 
 func (w *Window) destroyGPU() {
+	w.extCaps.Store(nil)
 	if w.gpu != nil {
 		w.ctx.Lock()
 		w.gpu.Release()
@@ -984,6 +992,25 @@ func NavigationColor(color color.NRGBA) Option {
 // Caller must assume responsibility for rendering which includes
 // initializing the render backend, swapping the framebuffer and
 // handling frame pacing.
+// PreferVulkan asks a Wayland window to try Vulkan before EGL, for frames its device can import
+// without a copy (op/extimage). If Vulkan is unavailable the window falls back to EGL as usual.
+// Other platforms ignore it: X11 keeps Vulkan off (see vulkanBuggy), macOS uses Metal already.
+func PreferVulkan() Option {
+	return func(_ unit.Metric, cnf *Config) {
+		cnf.preferVulkan = true
+	}
+}
+
+// ExternalCaps is what the window's GPU draws through op/extimage, and how; false before the
+// window has a GPU, or after it lost one. Safe on any goroutine. A different Caps.Gen means the
+// device changed.
+func (w *Window) ExternalCaps() (extimage.Caps, bool) {
+	if c := w.extCaps.Load(); c != nil {
+		return *c, true
+	}
+	return extimage.Caps{}, false
+}
+
 func CustomRenderer(custom bool) Option {
 	return func(_ unit.Metric, cnf *Config) {
 		cnf.CustomRenderer = custom

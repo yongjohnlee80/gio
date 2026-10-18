@@ -1220,6 +1220,7 @@ func (w *window) Configure(options []Option) {
 	cnf := w.config
 	cnf.apply(cfg, options)
 	w.config.decoHeight = cnf.decoHeight
+	w.config.preferVulkan = cnf.preferVulkan
 
 	switch cnf.Mode {
 	case Fullscreen:
@@ -2258,6 +2259,13 @@ func (w *window) EditorStateChanged(old, new editorState) {
 
 func (w *window) NewContext() (context, error) {
 	var firstErr error
+	if f := newWaylandVulkanContext; f != nil && w.config.preferVulkan {
+		c, err := f(w)
+		if err == nil {
+			return c, nil
+		}
+		firstErr = err
+	}
 	if f := newWaylandEGLContext; f != nil {
 		c, err := f(w)
 		if err == nil {
