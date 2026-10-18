@@ -77,6 +77,8 @@ const (
 	TypeSemanticSelected
 	TypeSemanticEnabled
 	TypeActionInput
+	// TypeExternalImage is appended last so no existing op type renumbers.
+	TypeExternalImage
 )
 
 type StackID struct {
@@ -153,6 +155,7 @@ const (
 	TypeSemanticSelectedLen = 2
 	TypeSemanticEnabledLen  = 2
 	TypeActionInputLen      = 1 + 1
+	TypeExternalImageLen    = 1 + 1
 )
 
 func (op *ClipOp) Decode(data []byte) {
@@ -426,6 +429,7 @@ var opProps = [0x100]opProp{
 	TypeSemanticSelected: {Size: TypeSemanticSelectedLen, NumRefs: 0},
 	TypeSemanticEnabled:  {Size: TypeSemanticEnabledLen, NumRefs: 0},
 	TypeActionInput:      {Size: TypeActionInputLen, NumRefs: 0},
+	TypeExternalImage:    {Size: TypeExternalImageLen, NumRefs: 2},
 }
 
 func (t OpType) props() (size, numRefs uint32) {
@@ -457,6 +461,8 @@ func (t OpType) String() string {
 		return "PushOpacity"
 	case TypePopOpacity:
 		return "PopOpacity"
+	case TypeExternalImage:
+		return "ExternalImage"
 	case TypeImage:
 		return "Image"
 	case TypePaint:

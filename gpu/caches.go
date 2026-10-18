@@ -15,6 +15,10 @@ type textureCacheKey struct {
 
 type textureCache struct {
 	res map[textureCacheKey]resourceCacheValue
+	// retired are resources replace took out of use this frame, and retiredPrev last frame's. A
+	// resource replaced this frame may still be sampled by this frame's submission, so it is
+	// released at the end of the next frame, after the device has waited for this one.
+	retired, retiredPrev []resource
 }
 
 type resourceCacheValue struct {
@@ -70,7 +74,23 @@ func (r *textureCache) put(key textureCacheKey, val resource) {
 	r.res[key] = v
 }
 
+// replace swaps key's resource for val, releasing the old one: an external frame's new revision
+// that could not update its texture in place.
+func (r *textureCache) replace(key textureCacheKey, val resource) {
+	v := r.res[key]
+	if v.resource != nil {
+		r.retired = append(r.retired, v.resource)
+	}
+	v.used = true
+	v.resource = val
+	r.res[key] = v
+}
+
 func (r *textureCache) frame() {
+	for _, old := range r.retiredPrev {
+		old.release()
+	}
+	r.retiredPrev, r.retired = r.retired, r.retiredPrev[:0]
 	for k, v := range r.res {
 		if v.used {
 			v.used = false
@@ -86,7 +106,10 @@ func (r *textureCache) release() {
 	for _, v := range r.res {
 		v.resource.release()
 	}
-	r.res = nil
+	for _, old := range append(r.retiredPrev, r.retired...) {
+		old.release()
+	}
+	r.res, r.retired, r.retiredPrev = nil, nil, nil
 }
 
 func newOpCache() *opCache {
