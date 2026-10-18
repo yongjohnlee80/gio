@@ -46,7 +46,6 @@ static void releaseInt(uintptr_t s) { CFRelease((CFTypeRef)s); }
 */
 import "C"
 
-
 // NewBGRA is a w×h BGRA IOSurface of one colour, as an IOSurfaceRef, and the call that releases it;
 // 0 if the system cannot make one.
 func NewBGRA(w, h int, b, g, r, a byte) (uintptr, func()) {
