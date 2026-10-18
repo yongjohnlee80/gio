@@ -13,9 +13,16 @@ import (
 	"gioui.org/shader"
 	"github.com/yongjohnlee80/gio/gpu/internal/driver"
 	"github.com/yongjohnlee80/gio/internal/vk"
+	"github.com/yongjohnlee80/gio/op/extimage"
 )
 
 type Backend struct {
+	// External frames (import_linux.go): the proven zero-copy tuples, the GPU's identity, and the
+	// queue family an imported image is acquired into.
+	extTuples []extimage.Tuple
+	deviceID  [16]byte
+	queueFam  int
+
 	physDev vk.PhysicalDevice
 	dev     vk.Device
 	queue   vk.Queue
@@ -145,6 +152,7 @@ func newVulkanDevice(api driver.Vulkan) (driver.Device, error) {
 		passes:    make(map[passKey]vk.RenderPass),
 	}
 	b.queue = vk.GetDeviceQueue(b.dev, api.QueueFamily, api.QueueIndex)
+	b.queueFam = api.QueueFamily
 	cmdPool, err := vk.CreateCommandPool(b.dev, api.QueueFamily)
 	if err != nil {
 		return nil, err
@@ -165,6 +173,7 @@ func newVulkanDevice(api driver.Vulkan) (driver.Device, error) {
 		return nil, mapErr(err)
 	}
 	b.fence = fence
+	b.externalSetup(api.DMABuf)
 	return b, nil
 }
 
