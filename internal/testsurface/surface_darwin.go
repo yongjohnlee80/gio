@@ -39,10 +39,13 @@ static IOSurfaceRef newBGRA(int w, int h, unsigned char b, unsigned char g, unsi
 	IOSurfaceUnlock(s, 0, NULL);
 	return s;
 }
+
+// asInt and fromInt move an IOSurfaceRef across the frame contract's integer, casting in C.
+static uintptr_t asInt(IOSurfaceRef s) { return (uintptr_t)s; }
+static void releaseInt(uintptr_t s) { CFRelease((CFTypeRef)s); }
 */
 import "C"
 
-import "unsafe"
 
 // NewBGRA is a w×h BGRA IOSurface of one colour, as an IOSurfaceRef, and the call that releases it;
 // 0 if the system cannot make one.
@@ -51,5 +54,6 @@ func NewBGRA(w, h int, b, g, r, a byte) (uintptr, func()) {
 	if s == 0 {
 		return 0, func() {}
 	}
-	return uintptr(unsafe.Pointer(s)), func() { C.CFRelease(C.CFTypeRef(s)) }
+	p := uintptr(C.asInt(s))
+	return p, func() { C.releaseInt(C.uintptr_t(p)) }
 }
