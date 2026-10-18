@@ -52,6 +52,8 @@ type Config struct {
 	// decoHeight is the height of the fallback decoration for platforms such
 	// as Wayland that may need fallback client-side decorations.
 	decoHeight unit.Dp
+	// preferVulkan puts Vulkan before EGL on Wayland (PreferVulkan).
+	preferVulkan bool
 }
 
 // ConfigEvent is sent whenever the configuration of a Window changes.
