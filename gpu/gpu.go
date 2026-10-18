@@ -29,6 +29,7 @@ import (
 	"github.com/yongjohnlee80/gio/internal/stroke"
 	"github.com/yongjohnlee80/gio/layout"
 	"github.com/yongjohnlee80/gio/op"
+	"github.com/yongjohnlee80/gio/op/extimage"
 
 	// Register backends.
 	_ "github.com/yongjohnlee80/gio/gpu/internal/d3d11"
@@ -44,7 +45,12 @@ type GPU interface {
 	Clear(color color.NRGBA)
 	// Frame draws the graphics operations from op into a viewport of target.
 	Frame(frame *op.Ops, target RenderTarget, viewport image.Point) error
+	// ExternalCaps is what this GPU draws through op/extimage, and how.
+	ExternalCaps() extimage.Caps
 }
+
+// ExternalCaps implements GPU.
+func (g *gpu) ExternalCaps() extimage.Caps { return g.renderer.caps }
 
 type gpu struct {
 	cache *textureCache
@@ -66,9 +72,19 @@ type renderer struct {
 	intersections packer
 	layers        packer
 	layerFBOs     fboSet
+
+	// External frames (external.go): the device's own importer, if it has one, the CPU driver,
+	// and the caps they make together.
+	importer     driver.ExternalImporter
+	importerName string
+	deviceID     [16]byte
+	cpu          driver.ExternalImporter
+	gen          uint64
+	caps         extimage.Caps
 }
 
 type drawOps struct {
+	extFrames    []*extimage.Frame // retained from collect until the next one
 	reader       ops.Reader
 	states       []f32.Affine2D
 	transStack   []f32.Affine2D
@@ -186,11 +202,22 @@ const (
 	filterNearest = 1
 )
 
-// imageOpData is the shadow of paint.ImageOp.
+// imageOpData is the shadow of paint.ImageOp, or of extimage.ImageOp (ext set).
 type imageOpData struct {
 	src    *image.RGBA
 	handle any
 	filter byte
+
+	ext    *extimage.Frame // an external frame, retained by drawOps until the next collect
+	report func(error)
+}
+
+// size is the image's size in pixels.
+func (d imageOpData) size() image.Point {
+	if d.ext != nil {
+		return d.ext.Desc().Size
+	}
+	return d.src.Bounds().Size()
 }
 
 type linearGradientOpData struct {
@@ -370,6 +397,10 @@ func (g *gpu) Release() {
 	g.renderer.release()
 	g.drawOps.pathCache.release()
 	g.cache.release()
+	for _, f := range g.drawOps.extFrames {
+		f.Drop()
+	}
+	g.drawOps.extFrames = nil
 	if g.timers != nil {
 		g.timers.Release()
 	}
@@ -448,6 +479,9 @@ func (g *gpu) Profile() string {
 }
 
 func (r *renderer) texHandle(cache *textureCache, data imageOpData) driver.Texture {
+	if data.ext != nil {
+		return r.externalTex(cache, data)
+	}
 	key := textureCacheKey{
 		filter: data.filter,
 		handle: data.handle,
@@ -499,6 +533,7 @@ func newRenderer(ctx driver.Device) *renderer {
 		blitter: newBlitter(ctx),
 		pather:  newPather(ctx),
 	}
+	r.newImporters()
 
 	maxDim := ctx.Caps().MaxTextureSize
 	// Large atlas textures cause artifacts due to precision loss in
@@ -888,6 +923,10 @@ func (r *renderer) drawLayers(layers []opacityLayer, ops []imageOp) {
 
 func (d *drawOps) reset(viewport image.Point) {
 	d.viewport = viewport
+	for _, f := range d.extFrames {
+		f.Drop() // the previous frame's imports are done: the cache holds what it keeps
+	}
+	d.extFrames = d.extFrames[:0]
 	d.imageOps = d.imageOps[:0]
 	d.pathOps = d.pathOps[:0]
 	d.pathOpCache = d.pathOpCache[:0]
@@ -1074,6 +1113,16 @@ loop:
 		case ops.TypeImage:
 			state.matType = materialTexture
 			state.image = decodeImageOp(encOp.Data, encOp.Refs)
+		case ops.TypeExternalImage:
+			f, report := extimage.FrameOf(encOp.Refs)
+			if f == nil {
+				continue
+			}
+			// Hold the frame until it is imported: the op's writer may drop its own reference as
+			// soon as the window has the ops.
+			d.extFrames = append(d.extFrames, f.Retain())
+			state.matType = materialTexture
+			state.image = imageOpData{ext: f, report: report, filter: encOp.Data[1]}
 		case ops.TypePaint:
 			// Transform (if needed) the painting rectangle and if so generate a clip path,
 			// for those cases also compute a partialTrans that maps texture coordinates between
@@ -1084,7 +1133,7 @@ loop:
 			inf := float32(1e6)
 			dst := f32.Rect(-inf, -inf, inf, inf)
 			if state.matType == materialTexture {
-				sz := state.image.src.Rect.Size()
+				sz := state.image.size()
 				dst = f32.Rectangle{Max: layout.FPt(sz)}
 			}
 			clipData, bnd, partialTrans := d.boundsForTransformedRect(dst, t)
@@ -1179,7 +1228,7 @@ func (d *drawState) materialFor(rect f32.Rectangle, off f32.Point, partTrans f32
 	case materialTexture:
 		m.material = materialTexture
 		dr := rect.Add(off).Round()
-		sz := d.image.src.Bounds().Size()
+		sz := d.image.size()
 		sr := f32.Rectangle{
 			Max: f32.Point{
 				X: float32(sz.X),
@@ -1207,6 +1256,12 @@ func (r *renderer) uploadImages(cache *textureCache, ops []imageOp) {
 		m := img.material
 		if m.material == materialTexture {
 			img.material.tex = r.texHandle(cache, m.data)
+			if img.material.tex == nil {
+				// An external frame that was not drawn (reported): paint nothing in its place.
+				img.material.material = materialColor
+				img.material.color = f32color.RGBA{}
+				img.material.opaque = false
+			}
 		}
 	}
 }

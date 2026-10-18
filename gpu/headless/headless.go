@@ -12,6 +12,7 @@ import (
 	"github.com/yongjohnlee80/gio/gpu"
 	"github.com/yongjohnlee80/gio/gpu/internal/driver"
 	"github.com/yongjohnlee80/gio/op"
+	"github.com/yongjohnlee80/gio/op/extimage"
 )
 
 // Window is a headless window.
@@ -122,6 +123,16 @@ func (w *Window) Release() {
 }
 
 // Size returns the window size.
+// ExternalCaps is what the window draws through op/extimage, and how.
+func (w *Window) ExternalCaps() extimage.Caps {
+	var c extimage.Caps
+	contextDo(w.ctx, func() error {
+		c = w.gpu.ExternalCaps()
+		return nil
+	})
+	return c
+}
+
 func (w *Window) Size() image.Point {
 	return w.size
 }
