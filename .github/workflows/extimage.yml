@@ -25,3 +25,8 @@ jobs:
       - name: Headless on Vulkan
         if: runner.os == 'Linux'
         run: go test -tags noopengl -count=1 ./gpu/headless ./internal/vk
+      # Named, verbose: the log must say whether the IOSurface frame was drawn (Metal zero-copy or
+      # the CPU path), not just that the package passed.
+      - name: IOSurface and memory frames drawn (macOS)
+        if: runner.os == 'macOS'
+        run: go test -count=1 -v -run 'IOSurface|MemoryFrame|NV12' ./gpu/headless
