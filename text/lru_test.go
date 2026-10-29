@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unsafe"
 
 	"github.com/yongjohnlee80/gio/font/opentype"
 	"github.com/yongjohnlee80/gio/op/clip"
@@ -129,5 +130,39 @@ func TestShapedPathsStayWithinTheBudget(t *testing.T) {
 	}
 	if _, ok := s.pathCache.Get(s.pathCache.hashGlyphs(last), last); !ok {
 		t.Error("the line shaped last is not cached")
+	}
+}
+
+// A run's glyphs count against the budget too: runs of spaces, with almost no outlines but long
+// glyph sequences the cache keeps to compare lookups with, still leave the cache within it.
+func TestLongBlankRunsStayWithinTheBudget(t *testing.T) {
+	face, err := opentype.Parse(goregular.TTF)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewShaper(NoSystemFonts(), WithCollection([]FontFace{{Face: face}}))
+	s.LayoutString(Parameters{PxPerEm: fixed.I(16), MaxWidth: 1 << 20, Locale: english}, " ")
+	space, ok := s.NextGlyph()
+	if !ok {
+		t.Fatal("no glyph for a space")
+	}
+	const runs, n = 20, 100_000
+	for r := range runs {
+		gs := make([]Glyph, n+r) // a distinct length per run: a distinct key
+		for i := range gs {
+			gs[i] = space
+			gs[i].X = fixed.Int26_6(i) * space.Advance
+		}
+		s.Shape(gs)
+	}
+	keys := 0
+	for e := s.pathCache.cache.tail.next; e != s.pathCache.cache.head; e = e.next {
+		keys += cap(e.v.glyphs) * int(unsafe.Sizeof(glyphInfo{}))
+	}
+	if keys > maxPathBytes || s.pathCache.cache.bytes > maxPathBytes {
+		t.Errorf("the cache keeps %d bytes of glyphs (%d accounted); want at most %d", keys, s.pathCache.cache.bytes, maxPathBytes)
+	}
+	if len(s.pathCache.cache.m) == 0 || len(s.pathCache.cache.m) >= runs {
+		t.Errorf("%d of %d runs cached; want the most recent within the budget", len(s.pathCache.cache.m), runs)
 	}
 }
