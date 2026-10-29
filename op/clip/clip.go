@@ -223,6 +223,11 @@ func (p *Path) LineTo(to f32.Point) {
 
 func (p *Path) cmd(data []byte, c scene.Command) {
 	ops.EncodeCommand(data, c)
+	// The hash identifies the path's content: its commands and the contour each belongs to, which
+	// the commands alone don't fix (a stroke treats contours separately).
+	var contour [4]byte
+	binary.LittleEndian.PutUint32(contour[:], uint32(p.contour))
+	p.hash.Write(contour[:])
 	p.hash.Write(data)
 }
 

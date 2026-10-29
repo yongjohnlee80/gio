@@ -16,10 +16,10 @@ import (
 	"github.com/yongjohnlee80/gio/op/paint"
 )
 
-// TestRecordedPathsReuseBuffers draws the same rounded rectangles every frame from freshly
-// recorded ops, so each frame misses the path cache and builds every path again, the way a UI that
-// re-records its frame does. On Vulkan, a steady frame must reuse the buffers the last frame
-// released rather than allocate device memory for each path.
+// TestRecordedPathsReuseBuffers draws rounded rectangles that move by a pixel every frame, so each
+// frame misses the path cache and builds every path again while the last frame's paths are
+// released. On Vulkan, a steady frame must reuse the buffers the last frame released rather than
+// allocate device memory for each path.
 func TestRecordedPathsReuseBuffers(t *testing.T) {
 	w, release := newTestWindow(t)
 	defer release()
@@ -27,10 +27,12 @@ func TestRecordedPathsReuseBuffers(t *testing.T) {
 	const paths = 40
 	col := color.NRGBA{A: 0xff, R: 0x20, G: 0x80, B: 0xe0}
 	var ops op.Ops
+	shift := 0
 	frame := func() {
+		shift ^= 1
 		ops.Reset()
 		for i := range paths {
-			x := 10 + (i%8)*30
+			x := shift + 10 + (i%8)*30
 			y := 10 + (i/8)*30
 			r := clip.RRect{Rect: image.Rect(x, y, x+24, y+24), SE: 6, SW: 6, NW: 6, NE: 6}
 			paint.FillShape(&ops, col, r.Op(&ops))
@@ -52,7 +54,7 @@ func TestRecordedPathsReuseBuffers(t *testing.T) {
 		frame()
 	}
 	if got := vk.MemoryAllocations() - before; got > 0 {
-		t.Errorf("%d steady frames of %d re-recorded paths made %d device-memory allocations, want 0", frames, paths, got)
+		t.Errorf("%d steady frames of %d moving paths made %d device-memory allocations, want 0", frames, paths, got)
 	}
 
 	// The reused buffers still draw the right shapes.
@@ -62,13 +64,13 @@ func TestRecordedPathsReuseBuffers(t *testing.T) {
 	}
 	want := f32color.NRGBAToRGBA(col)
 	for i := range paths {
-		x := 10 + (i%8)*30 + 12
+		x := shift + 10 + (i%8)*30 + 12
 		y := 10 + (i/8)*30 + 12
 		if got := img.RGBAAt(x, y); got != want {
 			t.Fatalf("path %d: centre pixel (%d,%d) is %v, want %v", i, x, y, got, want)
 		}
 	}
-	if got := img.RGBAAt(10+24+3, 10+12); got == want {
+	if got := img.RGBAAt(shift+10+24+3, 10+12); got == want {
 		t.Errorf("the gap between paths is painted: %v", got)
 	}
 }
