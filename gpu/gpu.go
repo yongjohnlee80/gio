@@ -938,8 +938,14 @@ func (d *drawOps) reset(viewport image.Point) {
 		f.Drop() // the previous frame's imports are done: the cache holds what it keeps
 	}
 	d.extFrames = d.extFrames[:0]
+	// The last frame's ops are cleared, not only truncated: a pathOp holds its vertices (a slice
+	// of the scratch) and its parent, and kept in the backing arrays they would pin a scratch
+	// shrinkVertCache gives back, and each frame's paths, until overwritten.
+	clear(d.imageOps)
 	d.imageOps = d.imageOps[:0]
+	clear(d.pathOps)
 	d.pathOps = d.pathOps[:0]
+	clear(d.pathOpCache)
 	d.pathOpCache = d.pathOpCache[:0]
 	d.shrinkVertCache()
 	d.vertCache = d.vertCache[:0]
