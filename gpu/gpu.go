@@ -179,6 +179,11 @@ type opKey struct {
 	outline        bool
 	strokeWidth    float32
 	sx, hx, sy, hy float32
+	// hash identifies a path by its content (clip.PathSpec's hash). When set, ops.Key is left
+	// zero, so a path recorded again with the same content, in a new frame's ops or at another
+	// place in the same ops, finds the vertices already built. A UI that re-records unchanged
+	// paths every frame would otherwise rebuild and re-upload each of them.
+	hash uint64
 	ops.Key
 }
 
@@ -1058,12 +1063,17 @@ loop:
 			quads.key.strokeWidth = decodeStrokeOp(encOp.Data)
 
 		case ops.TypePath:
+			hash := binary.LittleEndian.Uint64(encOp.Data[1:])
 			encOp, ok = r.Decode()
 			if !ok {
 				break loop
 			}
 			quads.aux = encOp.Data[ops.TypeAuxLen:]
-			quads.key.Key = encOp.Key
+			if hash != 0 {
+				quads.key.hash = hash
+			} else {
+				quads.key.Key = encOp.Key
+			}
 
 		case ops.TypeClip:
 			var op ops.ClipOp
