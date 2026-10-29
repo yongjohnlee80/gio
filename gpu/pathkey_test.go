@@ -139,3 +139,44 @@ func TestTheVertexScratchShrinksAfterABigFrame(t *testing.T) {
 		t.Errorf("frames as big as the scratch reallocated it: %d bytes, then %d", steady, got)
 	}
 }
+
+// TestAFramesOpsLeaveNoPointersPastTheirEnd draws paths and then a full-screen opaque fill, which
+// scraps the images drawn before it, and packs the stencils as gpu.frame does: the scrapped
+// images' paths have empty clips, so packStencils removes them. Neither shortening leaves a path
+// past the slice's end, where it would keep its vertices and the scratch alive.
+func TestAFramesOpsLeaveNoPointersPastTheirEnd(t *testing.T) {
+	vp := image.Pt(800, 600)
+	var d drawOps
+	d.pathCache = newOpCache()
+	var o op.Ops
+	for i := range 200 {
+		x, y := (i%20)*40, (i/20)*40
+		r := clip.RRect{Rect: image.Rect(x, y, x+30, y+30), SE: 6, SW: 6, NW: 6, NE: 6}
+		paint.FillShape(&o, color.NRGBA{R: 0xff, A: 0xff}, r.Op(&o))
+	}
+	paint.Fill(&o, color.NRGBA{B: 0xff, A: 0xff}) // the whole screen, opaque: a scrap
+	d.reset(vp)
+	d.collect(&o, vp)
+	if !d.clear {
+		t.Fatal("the trailing fill didn't scrap the images: the test can't observe the defect")
+	}
+	for i, img := range d.imageOps[:cap(d.imageOps)] {
+		if img.path != nil {
+			t.Fatalf("imageOps[%d], scrapped, still points at a path", i)
+		}
+	}
+	for _, img := range d.imageOps {
+		expandPathOp(img.path, img.clip)
+	}
+	if len(d.pathOps) == 0 {
+		t.Fatal("no path ops: the test can't observe packStencils' removal")
+	}
+	var r renderer
+	r.packer.maxDims = image.Pt(8192, 8192)
+	r.packStencils(&d.pathOps)
+	for i, p := range d.pathOps[len(d.pathOps):cap(d.pathOps)] {
+		if p != nil {
+			t.Fatalf("pathOps[%d], past the end after packStencils, still points at a path", len(d.pathOps)+i)
+		}
+	}
+}
