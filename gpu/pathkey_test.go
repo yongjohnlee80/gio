@@ -113,6 +113,19 @@ func TestTheVertexScratchShrinksAfterABigFrame(t *testing.T) {
 	if got := cap(d.vertCache); got > vertKeepMin {
 		t.Errorf("after %d small frames the scratch is still %d bytes (it was %d), want at most %d", 2*vertWindow+1, got, big, vertKeepMin)
 	}
+	// Nothing the frames left behind still refers to a scratch: a pathOp kept anywhere in the
+	// ops' backing arrays would pin the one given back.
+	d.reset(vp)
+	for i, p := range d.pathOpCache[:cap(d.pathOpCache)] {
+		if p.pathVerts != nil || p.parent != nil {
+			t.Fatalf("pathOpCache[%d] still holds a frame's vertices or parent after reset", i)
+		}
+	}
+	for i, p := range d.pathOps[:cap(d.pathOps)] {
+		if p != nil {
+			t.Fatalf("pathOps[%d] still points at a frame's path after reset", i)
+		}
+	}
 
 	// Every frame big: moving paths miss the cache each frame, so each frame builds them all.
 	for f := range vertWindow {
