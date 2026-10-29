@@ -80,3 +80,49 @@ func TestAPathsFractionalOffsetIsPartOfItsKey(t *testing.T) {
 		t.Errorf("the path at offsets (0,0) and (0.5,0.25): %d cache entries, want 2", got)
 	}
 }
+
+// TestTheVertexScratchShrinksAfterABigFrame builds one frame of many new paths, which grows the
+// vertex scratch, then draws small frames: within two windows of vertWindow frames (the big frame
+// counts in the first) the scratch is given back. A window whose every frame is as big keeps its
+// scratch rather than reallocating it.
+func TestTheVertexScratchShrinksAfterABigFrame(t *testing.T) {
+	vp := image.Pt(4000, 4000)
+	var d drawOps
+	d.pathCache = newOpCache()
+	var o op.Ops
+	frame := func(paths, shift int) {
+		o.Reset()
+		for i := range paths {
+			x, y := shift+(i%60)*60, (i/60)*60
+			r := clip.RRect{Rect: image.Rect(x, y, x+50, y+50), SE: 9, SW: 9, NW: 9, NE: 9}
+			paint.FillShape(&o, color.NRGBA{A: 0xff}, r.Op(&o))
+		}
+		d.reset(vp)
+		d.collect(&o, vp)
+		d.pathCache.frame()
+	}
+
+	frame(3000, 0)
+	big := cap(d.vertCache)
+	if big <= 4*vertKeepMin {
+		t.Fatalf("a frame of 3000 new paths left %d bytes of scratch; the test needs more than %d to observe a shrink", big, 4*vertKeepMin)
+	}
+	for range 2*vertWindow + 1 {
+		frame(1, 0)
+	}
+	if got := cap(d.vertCache); got > vertKeepMin {
+		t.Errorf("after %d small frames the scratch is still %d bytes (it was %d), want at most %d", 2*vertWindow+1, got, big, vertKeepMin)
+	}
+
+	// Every frame big: moving paths miss the cache each frame, so each frame builds them all.
+	for f := range vertWindow {
+		frame(1000, f%2)
+	}
+	steady := cap(d.vertCache)
+	for f := range vertWindow {
+		frame(1000, f%2)
+	}
+	if got := cap(d.vertCache); got != steady {
+		t.Errorf("frames as big as the scratch reallocated it: %d bytes, then %d", steady, got)
+	}
+}

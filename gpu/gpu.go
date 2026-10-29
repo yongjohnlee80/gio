@@ -91,14 +91,17 @@ type drawOps struct {
 	layers       []opacityLayer
 	opacityStack []int
 	vertCache    []byte
-	viewport     image.Point
-	clear        bool
-	clearColor   f32color.RGBA
-	imageOps     []imageOp
-	pathOps      []*pathOp
-	pathOpCache  []pathOp
-	qs           quadSplitter
-	pathCache    *opCache
+	// vertPeak is the most of vertCache a frame has used since vertFrames was last reset; see
+	// reset.
+	vertPeak, vertFrames int
+	viewport             image.Point
+	clear                bool
+	clearColor           f32color.RGBA
+	imageOps             []imageOp
+	pathOps              []*pathOp
+	pathOpCache          []pathOp
+	qs                   quadSplitter
+	pathCache            *opCache
 }
 
 type opacityLayer struct {
@@ -938,6 +941,7 @@ func (d *drawOps) reset(viewport image.Point) {
 	d.imageOps = d.imageOps[:0]
 	d.pathOps = d.pathOps[:0]
 	d.pathOpCache = d.pathOpCache[:0]
+	d.shrinkVertCache()
 	d.vertCache = d.vertCache[:0]
 	d.transStack = d.transStack[:0]
 	d.layers = d.layers[:0]
@@ -1508,6 +1512,31 @@ func fillContourMaxY(maxy float32, verts []byte) {
 		off := int(unsafe.Offsetof(((*vertex)(nil)).MaxY))
 		bo.PutUint32(verts[i+off:], math.Float32bits(maxy))
 	}
+}
+
+const (
+	// vertWindow is how many frames the vertex scratch's use is watched before it may shrink.
+	vertWindow = 120
+	// vertKeepMin is vertex scratch kept whatever the frames use.
+	vertKeepMin = 1 << 20
+)
+
+// shrinkVertCache gives back vertex scratch the recent frames no longer need. The scratch holds a
+// frame's newly built path vertices until they are uploaded, and append keeps its largest
+// capacity: one frame that builds every path (the first, or a full relayout) left it at that size
+// for the window's life, though later frames find their paths in the cache and build few. When
+// vertWindow frames have used under a quarter of it, it is reallocated at twice their peak. It
+// runs at the start of a frame, when nothing refers to the last frame's vertices.
+func (d *drawOps) shrinkVertCache() {
+	d.vertPeak = max(d.vertPeak, len(d.vertCache))
+	d.vertFrames++
+	if d.vertFrames < vertWindow {
+		return
+	}
+	if c := cap(d.vertCache); c > vertKeepMin && c > 4*d.vertPeak {
+		d.vertCache = make([]byte, 0, max(2*d.vertPeak, vertKeepMin))
+	}
+	d.vertPeak, d.vertFrames = 0, 0
 }
 
 func (d *drawOps) writeVertCache(n int) []byte {
