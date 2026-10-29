@@ -179,6 +179,9 @@ type opKey struct {
 	outline        bool
 	strokeWidth    float32
 	sx, hx, sy, hy float32
+	// fx, fy are the translation's fractional part, which transformOffset leaves in the transform
+	// the vertices are built with; only the whole-pixel offset is applied when drawing.
+	fx, fy float32
 	// hash identifies a path by its content (clip.PathSpec's hash). When set, ops.Key is left
 	// zero, so a path recorded again with the same content, in a new frame's ops or at another
 	// place in the same ops, finds the vertices already built. A UI that re-records unchanged
@@ -1003,12 +1006,16 @@ func (d *drawOps) save(id int, state f32.Affine2D) {
 	d.states[id] = state
 }
 
+// SetTransform keys k by the transform its vertices are built with: transformOffset's, the linear
+// part and the translation's fractional part.
 func (k opKey) SetTransform(t f32.Affine2D) opKey {
-	sx, hx, _, hy, sy, _ := t.Elems()
+	sx, hx, fx, hy, sy, fy := t.Elems()
 	k.sx = sx
 	k.hx = hx
 	k.hy = hy
 	k.sy = sy
+	k.fx = fx
+	k.fy = fy
 	return k
 }
 
