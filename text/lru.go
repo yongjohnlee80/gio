@@ -5,6 +5,7 @@ package text
 import (
 	"image"
 	"sync/atomic"
+	"unsafe"
 
 	giofont "github.com/yongjohnlee80/gio/font"
 	"github.com/yongjohnlee80/gio/io/system"
@@ -142,7 +143,9 @@ func (c *glyphLRU[V]) Get(key uint64, gs []Glyph) (V, bool) {
 	return v, false
 }
 
-// Put caches v, holding size bytes, for glyphs under key (hashGlyphs).
+// Put caches v, holding size bytes, for glyphs under key (hashGlyphs). The entry is sized as v's
+// bytes and the copy of the glyphs it keeps to compare a lookup with: a long run with little to
+// draw (spaces) holds its glyphs and almost no outlines.
 func (c *glyphLRU[V]) Put(key uint64, glyphs []Glyph, v V, size int) {
 	gids := make([]glyphInfo, len(glyphs))
 	firstX := fixed.I(0)
@@ -157,7 +160,7 @@ func (c *glyphLRU[V]) Put(key uint64, glyphs []Glyph, v V, size int) {
 		glyphs: gids,
 		v:      v,
 	}
-	c.cache.PutSized(key, val, size)
+	c.cache.PutSized(key, val, size+cap(gids)*int(unsafe.Sizeof(glyphInfo{})))
 }
 
 type pathCache = glyphLRU[clip.PathSpec]
