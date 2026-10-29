@@ -392,8 +392,16 @@ import (
 	"math"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 )
+
+// memoryAllocations counts the successful vkAllocateMemory calls made through this package.
+var memoryAllocations atomic.Uint64
+
+// MemoryAllocations reports how many device-memory allocations this package has made, for tests
+// that check a steady frame allocates nothing.
+func MemoryAllocations() uint64 { return memoryAllocations.Load() }
 
 type (
 	AttachmentLoadOp      = C.VkAttachmentLoadOp
@@ -1455,6 +1463,7 @@ func CreateImage(pd PhysicalDevice, d Device, format Format, width, height, mipm
 		DestroyImage(d, img)
 		return nilImage, nilDeviceMemory, fmt.Errorf("vulkan: vkAllocateMemory: %w", err)
 	}
+	memoryAllocations.Add(1)
 
 	if err := vkErr(C.vkBindImageMemory(funcs.vkBindImageMemory, d, img, imgMem, 0)); err != nil {
 		FreeMemory(d, imgMem)
@@ -1523,6 +1532,7 @@ func CreateBuffer(pd PhysicalDevice, d Device, size int, usage BufferUsageFlags,
 		DestroyBuffer(d, buf)
 		return nilBuffer, nilDeviceMemory, fmt.Errorf("vulkan: vkAllocateMemory: %w", err)
 	}
+	memoryAllocations.Add(1)
 
 	if err := vkErr(C.vkBindBufferMemory(funcs.vkBindBufferMemory, d, buf, mem, 0)); err != nil {
 		FreeMemory(d, mem)

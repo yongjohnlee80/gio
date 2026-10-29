@@ -64,6 +64,123 @@ type Backend struct {
 	}
 
 	caps driver.Features
+
+	// pool keeps released vertex and index buffers for reuse; see bufPool.
+	pool bufPool
+}
+
+// bufPool recycles device-local vertex and index buffers by size class. Without it, every path
+// that misses the gpu package's path cache costs a vkAllocateMemory when it is built and a
+// vkFreeMemory when it is released: on NVIDIA, about two thirds of a busy window's CPU. A released
+// buffer goes back to the pool at the next BeginFrame, when the frame that used it has completed
+// (the same point the buffer was destroyed before), and the next buffer of its size class reuses it.
+//
+// Storage buffers are left out because they are bound at their whole size, and so are buffers in
+// any other memory, such as the mapped staging buffer.
+type bufPool struct {
+	free  map[bufKey][]pooledBuf
+	count int
+	bytes int
+	frame uint64
+}
+
+type bufKey struct {
+	usage vk.BufferUsageFlags
+	size  int
+}
+
+type pooledBuf struct {
+	buf   vk.Buffer
+	mem   vk.DeviceMemory
+	frame uint64 // the frame it was returned in
+}
+
+const (
+	poolMinSize       = 256     // the smallest size class
+	poolMaxSize       = 4 << 20 // larger buffers are allocated and freed as before
+	poolMaxBuffers    = 1024    // well below the 4096 live allocations NVIDIA allows
+	poolMaxBytes      = 32 << 20
+	poolMaxIdleFrames = 120 // a buffer unused this long is freed
+	poolTrimEvery     = 60  // frames between trims
+)
+
+// poolSizeClass returns the size class a buffer of size bytes is allocated at, or 0 when such a
+// buffer isn't pooled.
+func poolSizeClass(size int, usage vk.BufferUsageFlags, props vk.MemoryPropertyFlags) int {
+	if props != vk.MEMORY_PROPERTY_DEVICE_LOCAL_BIT || usage&vk.BUFFER_USAGE_STORAGE_BUFFER_BIT != 0 || size > poolMaxSize {
+		return 0
+	}
+	if size <= poolMinSize {
+		return poolMinSize
+	}
+	return 1 << bits.Len(uint(size-1))
+}
+
+// get returns a pooled buffer of the size class, if there is one.
+func (p *bufPool) get(k bufKey) (pooledBuf, bool) {
+	l := p.free[k]
+	if len(l) == 0 {
+		return pooledBuf{}, false
+	}
+	e := l[len(l)-1]
+	p.free[k] = l[:len(l)-1]
+	p.count--
+	p.bytes -= k.size
+	return e, true
+}
+
+// put returns a buffer to the pool, or frees it when the pool is full.
+func (p *bufPool) put(d vk.Device, k bufKey, e pooledBuf) {
+	if p.count >= poolMaxBuffers || p.bytes+k.size > poolMaxBytes {
+		vk.DestroyBuffer(d, e.buf)
+		vk.FreeMemory(d, e.mem)
+		return
+	}
+	if p.free == nil {
+		p.free = make(map[bufKey][]pooledBuf)
+	}
+	e.frame = p.frame
+	p.free[k] = append(p.free[k], e)
+	p.count++
+	p.bytes += k.size
+}
+
+// beginFrame counts a frame and, every poolTrimEvery frames, frees the buffers that have been
+// idle for poolMaxIdleFrames, so a burst of large buffers isn't kept for the window's life.
+func (p *bufPool) beginFrame(d vk.Device) {
+	p.frame++
+	if p.frame%poolTrimEvery != 0 {
+		return
+	}
+	for k, l := range p.free {
+		kept := l[:0]
+		for _, e := range l {
+			if p.frame-e.frame > poolMaxIdleFrames {
+				vk.DestroyBuffer(d, e.buf)
+				vk.FreeMemory(d, e.mem)
+				p.count--
+				p.bytes -= k.size
+				continue
+			}
+			kept = append(kept, e)
+		}
+		if len(kept) == 0 {
+			delete(p.free, k)
+		} else {
+			p.free[k] = kept
+		}
+	}
+}
+
+// release frees every pooled buffer.
+func (p *bufPool) release(d vk.Device) {
+	for _, l := range p.free {
+		for _, e := range l {
+			vk.DestroyBuffer(d, e.buf)
+			vk.FreeMemory(d, e.mem)
+		}
+	}
+	*p = bufPool{}
 }
 
 type passKey struct {
@@ -127,6 +244,9 @@ type Buffer struct {
 	store   []byte
 	mem     vk.DeviceMemory
 	usage   vk.BufferUsageFlags
+	// pooled is the size class of a buffer that returns to the backend's pool when released, or
+	// 0 for a buffer that is freed.
+	pooled int
 
 	scope struct {
 		stage  vk.PipelineStageFlags
@@ -181,6 +301,7 @@ func (b *Backend) BeginFrame(target driver.RenderTarget, clear bool, viewport im
 	b.staging.size = 0
 	b.cmdPool.used = 0
 	b.runDefers()
+	b.pool.beginFrame(b.dev)
 	b.resetPipes()
 
 	if target == nil {
@@ -277,6 +398,7 @@ func (b *Backend) Release() {
 		buf.Release()
 	}
 	b.runDefers()
+	b.pool.release(b.dev)
 	for _, rp := range b.passes {
 		vk.DestroyRenderPass(b.dev, rp)
 	}
@@ -374,6 +496,14 @@ func (b *Backend) NewBuffer(bindings driver.BufferBinding, size int) (driver.Buf
 }
 
 func (b *Backend) newBuffer(size int, usage vk.BufferUsageFlags, props vk.MemoryPropertyFlags) (*Buffer, error) {
+	if class := poolSizeClass(size, usage, props); class != 0 {
+		k := bufKey{usage: usage, size: class}
+		if e, ok := b.pool.get(k); ok {
+			return &Buffer{backend: b, buf: e.buf, mem: e.mem, usage: usage, pooled: class}, nil
+		}
+		buf, mem, err := vk.CreateBuffer(b.physDev, b.dev, class, usage, props)
+		return &Buffer{backend: b, buf: buf, mem: mem, usage: usage, pooled: class}, err
+	}
 	buf, mem, err := vk.CreateBuffer(b.physDev, b.dev, size, usage, props)
 	return &Buffer{backend: b, buf: buf, mem: mem, usage: usage}, err
 }
@@ -964,7 +1094,12 @@ func (b *Buffer) barrier(cmdBuf vk.CommandBuffer, stage vk.PipelineStageFlags, a
 func (b *Buffer) Release() {
 	freeb := *b
 	if freeb.buf != 0 {
+		backend := b.backend
 		b.backend.deferFunc(func(d vk.Device) {
+			if freeb.pooled != 0 {
+				backend.pool.put(d, bufKey{usage: freeb.usage, size: freeb.pooled}, pooledBuf{buf: freeb.buf, mem: freeb.mem})
+				return
+			}
 			vk.DestroyBuffer(d, freeb.buf)
 			vk.FreeMemory(d, freeb.mem)
 		})
