@@ -840,6 +840,7 @@ func (r *renderer) packStencils(pops *[]*pathOp) {
 		p := ops[i]
 		if p.clip.Empty() {
 			ops[i] = ops[len(ops)-1]
+			ops[len(ops)-1] = nil // nothing past the end keeps a path (see drawOps.reset)
 			ops = ops[:len(ops)-1]
 			continue
 		}
@@ -937,10 +938,13 @@ func (d *drawOps) reset(viewport image.Point) {
 	for _, f := range d.extFrames {
 		f.Drop() // the previous frame's imports are done: the cache holds what it keeps
 	}
+	clear(d.extFrames)
 	d.extFrames = d.extFrames[:0]
 	// The last frame's ops are cleared, not only truncated: a pathOp holds its vertices (a slice
 	// of the scratch) and its parent, and kept in the backing arrays they would pin a scratch
-	// shrinkVertCache gives back, and each frame's paths, until overwritten.
+	// shrinkVertCache gives back, and each frame's paths, until overwritten. clear reaches only
+	// to len, so a frame that shortens one of them in place (packStencils' removal, collect's
+	// full-screen scrap) clears what it drops itself.
 	clear(d.imageOps)
 	d.imageOps = d.imageOps[:0]
 	clear(d.pathOps)
@@ -1187,6 +1191,9 @@ loop:
 			if bounds.Min == (image.Point{}) && bounds.Max == d.viewport && rect && mat.opaque && (mat.material == materialColor) && len(d.opacityStack) == 0 {
 				// The image is a uniform opaque color and takes up the whole screen.
 				// Scrap images up to and including this image and set clear color.
+				// Cleared, not only truncated: a scrapped imageOp's path would stay reachable past
+				// the end, where reset's clear doesn't reach (see drawOps.reset).
+				clear(d.imageOps)
 				d.imageOps = d.imageOps[:0]
 				d.clearColor = mat.color.Opaque()
 				d.clear = true
