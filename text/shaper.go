@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-text/typesetting/font"
 	giofont "github.com/yongjohnlee80/gio/font"
+	"github.com/yongjohnlee80/gio/internal/ops"
 	"github.com/yongjohnlee80/gio/io/system"
 	"github.com/yongjohnlee80/gio/op"
 	"github.com/yongjohnlee80/gio/op/clip"
@@ -275,6 +276,7 @@ func (l *Shaper) init() {
 		return
 	}
 	l.initialized = true
+	l.pathCache.cache.maxBytes = maxPathBytes
 	l.reader = bufio.NewReader(nil)
 	l.shaper = *newShaperImpl(!l.config.disableSystemFonts, l.config.collection)
 }
@@ -642,7 +644,7 @@ func (l *Shaper) Shape(gs []Glyph) clip.PathSpec {
 	}
 	pathOps := new(op.Ops)
 	shape = l.shaper.Shape(pathOps, gs)
-	l.pathCache.Put(key, gs, shape)
+	l.pathCache.Put(key, gs, shape, ops.Size(&pathOps.Internal))
 	return shape
 }
 
@@ -659,6 +661,6 @@ func (l *Shaper) Bitmaps(gs []Glyph) op.CallOp {
 	}
 	callOps := new(op.Ops)
 	call = l.shaper.Bitmaps(callOps, gs)
-	l.bitmapShapeCache.Put(key, gs, call)
+	l.bitmapShapeCache.Put(key, gs, call, 0)
 	return call
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"image"
 	"math"
+	"unsafe"
 
 	"github.com/yongjohnlee80/gio/f32"
 	"github.com/yongjohnlee80/gio/internal/byteslice"
@@ -170,6 +171,12 @@ func (op *ClipOp) Decode(data []byte) {
 	op.Bounds.Max.Y = int(int32(bo.Uint32(data[13:])))
 	op.Outline = data[17] == 1
 	op.Shape = Shape(data[18])
+}
+
+// Size is the bytes o holds: its operations' buffer and its references. A cache of recorded
+// operations bounds itself by it.
+func Size(o *Ops) int {
+	return cap(o.data) + cap(o.refs)*int(unsafe.Sizeof(any(nil)))
 }
 
 func Reset(o *Ops) {
